@@ -435,7 +435,8 @@ do_update_script() {
     yellow "正在更新管理脚本..."
     setup_shortcut
     green "脚本更新成功"
-    sleep 1
+    echo
+    read -p "按 Enter 键以重新启动脚本并应用更新..."
     # 使用完整路径防止快捷键尚未生效
     exec /usr/bin/sb
 }
