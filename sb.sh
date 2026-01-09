@@ -10,6 +10,9 @@ export LANG=en_US.UTF-8
 # 1. 变量定义与配置管理
 # ========================================================
 
+# 脚本版本
+SCRIPT_VERSION="1.1.0"
+
 # 静默模式标志
 SILENT=false
 
@@ -598,7 +601,7 @@ main_menu() {
     while true; do
         clear
         white "══════════════════════════════════════════════════"
-        white "         Singbox 管理脚本 | 快捷方式: sb"
+        white "      Singbox 管理脚本 v${SCRIPT_VERSION} | 快捷方式: sb"
         white "══════════════════════════════════════════════════"
         echo -e "${green} 1. 安装Singbox服务         2. 卸载Singbox服务${plain}"
         echo -e "${green} 3. 重启/停止Singbox服务    4. 更新Singbox管理脚本${plain}"
