@@ -397,7 +397,7 @@ EOF
 # 部署快捷入口
 setup_shortcut() {
     [[ -f /usr/bin/sb ]] && rm -f /usr/bin/sb
-    curl -sL -o /usr/bin/sb https://raw.githubusercontent.com/GamblerIX/singbox/main/sb.sh
+    curl -sL -o /usr/bin/sb "https://raw.githubusercontent.com/GamblerIX/singbox/main/sb.sh?v=$RANDOM"
     chmod +x /usr/bin/sb
 }
 
