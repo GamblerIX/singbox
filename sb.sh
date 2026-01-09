@@ -11,7 +11,7 @@ export LANG=en_US.UTF-8
 # ========================================================
 
 # 脚本版本
-SCRIPT_VERSION="1.1.1"
+SCRIPT_VERSION="1.1.2"
 
 # 静默模式标志
 SILENT=false
@@ -401,9 +401,23 @@ EOF
 setup_shortcut() {
     local tmp_file="/tmp/sb_tmp"
     yellow "正在下载最新脚本..."
-    if curl -sL -o "$tmp_file" "https://raw.githubusercontent.com/GamblerIX/singbox/main/sb.sh?v=$RANDOM"; then
+    
+    # 优先使用 GitHub API 获取最新内容（绕过 CDN 缓存）
+    if command -v base64 &>/dev/null && command -v jq &>/dev/null; then
+        local api_response=$(curl -sL "https://api.github.com/repos/GamblerIX/singbox/contents/sb.sh?ref=main")
+        if echo "$api_response" | jq -e '.content' &>/dev/null; then
+            echo "$api_response" | jq -r '.content' | base64 -d > "$tmp_file"
+            chmod +x "$tmp_file"
+            rm -f /usr/bin/sb
+            mv -f "$tmp_file" /usr/bin/sb
+            green "快捷方式 /usr/bin/sb 部署成功（API 模式）"
+            return 0
+        fi
+    fi
+    
+    # 降级方案：使用 raw 链接
+    if curl -sL -o "$tmp_file" "https://raw.githubusercontent.com/GamblerIX/singbox/main/sb.sh?t=$(date +%s)"; then
         chmod +x "$tmp_file"
-        # 强制替换旧文件
         rm -f /usr/bin/sb
         mv -f "$tmp_file" /usr/bin/sb
         green "快捷方式 /usr/bin/sb 部署成功"
