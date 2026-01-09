@@ -529,11 +529,18 @@ show_nodes() {
 
 # 安装全流程
 do_install() {
+    # 强制重置静默标志，确保从菜单点击时始终有交互
+    SILENT=false
+    
     if [[ -f /etc/systemd/system/sing-box.service ]]; then
         red "Sing-box 已安装，请勿重复安装"
         read -n 1 -s -r -p "按任意键返回主菜单..."
         return
     fi
+    
+    white "══════════════════════════════════════════════════"
+    green "        开始 Singbox 交互式安装流程"
+    white "══════════════════════════════════════════════════"
     
     detect_system
     install_dependencies
@@ -545,7 +552,7 @@ do_install() {
     # 2. 证书配置
     setup_certificates
     
-    # 3. 端口与 ID
+    # 3. 端口与 ID 配置
     setup_ports_and_id
     
     # 4. 生成 REALITY 密钥对
@@ -585,6 +592,8 @@ do_install() {
 }
 
 main_menu() {
+    # 进入菜单时强制关闭静默模式
+    SILENT=false
     while true; do
         clear
         white "══════════════════════════════════════════════════"
