@@ -389,11 +389,12 @@ do_restart_stop() {
 
 # 更新脚本
 do_update_script() {
+    yellow "正在更新管理脚本..."
     setup_shortcut
-    curl -sL https://raw.githubusercontent.com/GamblerIX/singbox/main/version | head -1 > "$SB_CONF_DIR/v" 2>/dev/null
     green "脚本更新成功"
     sleep 1
-    exec sb
+    # 使用完整路径防止快捷键尚未生效
+    exec /usr/bin/sb
 }
 
 # 更新内核
@@ -526,9 +527,6 @@ do_install() {
     
     setup_service
     setup_shortcut
-    
-    # 记录版本
-    curl -sL https://raw.githubusercontent.com/GamblerIX/singbox/main/version | head -1 > "$SB_CONF_DIR/v" 2>/dev/null
     
     green "Sing-box 安装成功并已启动！"
     white "快捷命令：sb"
