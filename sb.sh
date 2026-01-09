@@ -11,7 +11,7 @@ export LANG=en_US.UTF-8
 # ========================================================
 
 # 脚本版本
-SCRIPT_VERSION="1.1.0"
+SCRIPT_VERSION="1.1.1"
 
 # 静默模式标志
 SILENT=false
