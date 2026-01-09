@@ -399,9 +399,18 @@ EOF
 
 # 部署快捷入口
 setup_shortcut() {
-    [[ -f /usr/bin/sb ]] && rm -f /usr/bin/sb
-    curl -sL -o /usr/bin/sb "https://raw.githubusercontent.com/GamblerIX/singbox/main/sb.sh?v=$RANDOM"
-    chmod +x /usr/bin/sb
+    local tmp_file="/tmp/sb_tmp"
+    yellow "正在下载最新脚本..."
+    if curl -sL -o "$tmp_file" "https://raw.githubusercontent.com/GamblerIX/singbox/main/sb.sh?v=$RANDOM"; then
+        chmod +x "$tmp_file"
+        # 强制替换旧文件
+        rm -f /usr/bin/sb
+        mv -f "$tmp_file" /usr/bin/sb
+        green "快捷方式 /usr/bin/sb 部署成功"
+    else
+        red "脚本下载失败，请检查网络"
+        return 1
+    fi
 }
 
 # ========================================================
