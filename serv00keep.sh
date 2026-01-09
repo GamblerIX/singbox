@@ -1,5 +1,5 @@
 #!/bin/bash
-# 定义颜色
+
 re="\033[0m"
 red="\033[1;91m"
 green="\e[1;32m"
@@ -11,13 +11,13 @@ yellow() { echo -e "\e[1;33m$1\033[0m"; }
 purple() { echo -e "\e[1;35m$1\033[0m"; }
 reading() { read -p "$(red "$1")" "$2"; }
 export LC_ALL=C
-export UUID=${UUID:-''}  
-export ARGO_DOMAIN=${ARGO_DOMAIN:-''}   
-export ARGO_AUTH=${ARGO_AUTH:-''}     
-export vless_port=${vless_port:-''}    
-export vmess_port=${vmess_port:-''}  
-export hy2_port=${hy2_port:-''}       
-export IP=${IP:-''}                  
+export UUID=${UUID:-''}
+export ARGO_DOMAIN=${ARGO_DOMAIN:-''}
+export ARGO_AUTH=${ARGO_AUTH:-''}
+export vless_port=${vless_port:-''}
+export vmess_port=${vmess_port:-''}
+export hy2_port=${hy2_port:-''}
+export IP=${IP:-''}
 export reym=${reym:-''}
 export reset=${reset:-''}
 export resport=${resport:-''}
@@ -72,7 +72,7 @@ else
 echo "$UUID" > $WORKDIR/UUID.txt
 UUID=$(cat "$WORKDIR/UUID.txt" 2>/dev/null)
 fi
-curl -sL https://raw.githubusercontent.com/yonggekkk/sing-box-yg/main/app.js -o "$keep_path"/app.js
+curl -sL https://raw.githubusercontent.com/GamblerIX/singbox/main/app.js -o "$keep_path"/app.js
 sed -i '' "15s/name/$snb/g" "$keep_path"/app.js
 sed -i '' "59s/key/$UUID/g" "$keep_path"/app.js
 sed -i '' "90s/name/$USERNAME/g" "$keep_path"/app.js
@@ -128,7 +128,7 @@ okip(){
     else
         FIRST_IP=${IP_LIST[0]}
         RESPONSE=$(curl -s --max-time 2 "${API_URL}/${FIRST_IP}")
-        
+
         if [[ $(echo "$RESPONSE" | jq -r '.status') == "Available" ]]; then
             IP=$FIRST_IP
         else
@@ -165,7 +165,7 @@ if [[ $tcp_ports -ne 2 || $udp_ports -ne 1 ]]; then
         tcp_ports_to_add=$((2 - tcp_ports))
         tcp_ports_added=0
         while [[ $tcp_ports_added -lt $tcp_ports_to_add ]]; do
-            tcp_port=$(shuf -i 10000-65535 -n 1) 
+            tcp_port=$(shuf -i 10000-65535 -n 1)
             result=$(devil port add tcp $tcp_port 2>&1)
             if [[ $result == *"succesfully"* ]]; then
                 echo "已添加TCP端口: $tcp_port"
@@ -183,7 +183,7 @@ if [[ $tcp_ports -ne 2 || $udp_ports -ne 1 ]]; then
 
     if [[ $udp_ports -lt 1 ]]; then
         while true; do
-            udp_port=$(shuf -i 10000-65535 -n 1) 
+            udp_port=$(shuf -i 10000-65535 -n 1)
             result=$(devil port add udp $udp_port 2>&1)
             if [[ $result == *"succesfully"* ]]; then
                 echo "已添加UDP端口: $udp_port"
@@ -193,10 +193,9 @@ if [[ $tcp_ports -ne 2 || $udp_ports -ne 1 ]]; then
             fi
         done
     fi
-    #echo "端口已调整完成,将断开ssh连接"
+
     sleep 3
-    #devil binexec on >/dev/null 2>&1
-    #kill -9 $(ps -o ppid= -p $$) >/dev/null 2>&1
+
     port_list=$(devil port list)
     tcp_ports=$(echo "$port_list" | grep -c "tcp")
     udp_ports=$(echo "$port_list" | grep -c "udp")
@@ -211,7 +210,7 @@ else
     tcp_port1=$(echo "$tcp_ports" | sed -n '1p')
     tcp_port2=$(echo "$tcp_ports" | sed -n '2p')
     udp_port=$(echo "$port_list" | awk '/udp/ {print $1}')
-    echo "你的vless-reality的TCP端口: $tcp_port1" 
+    echo "你的vless-reality的TCP端口: $tcp_port1"
     echo "你的vmess的TCP端口(设置Argo固定域名端口)：$tcp_port2"
     echo "你的hysteria2的UDP端口: $udp_port"
 fi
@@ -229,13 +228,13 @@ get_argodomain() {
     local max_retries=6
     local argodomain=""
     while [[ $retry -lt $max_retries ]]; do
-    ((retry++)) 
+    ((retry++))
     argodomain=$(cat boot.log 2>/dev/null | grep -a trycloudflare.com | awk 'NR==2{print}' | awk -F// '{print $2}' | awk '{print $1}')
       if [[ -n $argodomain ]]; then
         break
       fi
       sleep 2
-    done  
+    done
     if [ -z ${argodomain} ]; then
     argodomain="Argo临时域名暂时获取失败，Argo节点暂不可用(保活过程中会自动恢复)，其他节点依旧可用"
     fi
@@ -244,7 +243,7 @@ get_argodomain() {
 }
 
 if [ ! -f serv00keep.sh ]; then
-curl -sSL https://raw.githubusercontent.com/yonggekkk/sing-box-yg/main/serv00keep.sh -o serv00keep.sh && chmod +x serv00keep.sh
+curl -sSL https://raw.githubusercontent.com/GamblerIX/singbox/main/serv00keep.sh -o serv00keep.sh && chmod +x serv00keep.sh
 echo '#!/bin/bash
 red() { echo -e "\e[1;91m$1\033[0m"; }
 green() { echo -e "\e[1;32m$1\033[0m"; }
@@ -298,14 +297,14 @@ for host in "${ym[@]}"; do
 response=$(curl -sL --connect-timeout 5 --max-time 7 "https://ss.fkj.pp.ua/api/getip?host=$host")
 if [[ "$response" =~ (unknown|not|error) ]]; then
 dig @8.8.8.8 +time=5 +short $host | sort -u >> ip.txt
-sleep 1  
+sleep 1
 else
 while IFS='|' read -r ip status; do
 if [[ $status == "Accessible" ]]; then
 echo "$ip: 可用" >> ip.txt
 else
 echo "$ip: 被墙 (Argo与CDN回源节点、proxyip依旧有效)" >> ip.txt
-fi	
+fi
 done <<< "$response"
 fi
 done
@@ -345,10 +344,10 @@ download_with_fallback() {
     curl -L -sS --max-time 2 -o "$NEW_FILENAME" "$URL" &
     CURL_PID=$!
     CURL_START_SIZE=$(stat -c%s "$NEW_FILENAME" 2>/dev/null || echo 0)
-    
+
     sleep 1
     CURL_CURRENT_SIZE=$(stat -c%s "$NEW_FILENAME" 2>/dev/null || echo 0)
-    
+
     if [ "$CURL_CURRENT_SIZE" -le "$CURL_START_SIZE" ]; then
         kill $CURL_PID 2>/dev/null
         wait $CURL_PID 2>/dev/null
@@ -364,13 +363,13 @@ for entry in "${FILE_INFO[@]}"; do
     URL=$(echo "$entry" | cut -d ' ' -f 1)
     RANDOM_NAME=$(generate_random_name)
     NEW_FILENAME="$DOWNLOAD_DIR/$RANDOM_NAME"
-    
+
     if [ -e "$NEW_FILENAME" ]; then
         echo -e "\e[1;32m$NEW_FILENAME already exists, Skipping download\e[0m"
     else
         download_with_fallback "$URL" "$NEW_FILENAME"
     fi
-    
+
     chmod +x "$NEW_FILENAME"
     FILE_MAP[$(echo "$entry" | cut -d ' ' -f 2)]="$NEW_FILENAME"
 done
@@ -538,7 +537,7 @@ openssl req -new -x509 -days 3650 -key "private.key" -out "cert.pem" -subj "/CN=
     ],
 EOF
 if [[ "$nb" =~ 14|15 ]]; then
-cat >> config.json <<EOF 
+cat >> config.json <<EOF
     "rules": [
     {
      "domain": [
@@ -554,13 +553,13 @@ cat >> config.json <<EOF
     }
     ],
     "final": "direct"
-    }  
+    }
 }
 EOF
 else
   cat >> config.json <<EOF
     "final": "direct"
-    }  
+    }
 }
 EOF
 fi
@@ -569,7 +568,7 @@ if ! ps aux | grep '[r]un -c con' > /dev/null; then
 ps aux | grep '[r]un -c con' | awk '{print $2}' | xargs -r kill -9 > /dev/null 2>&1
 if [ -e "$(basename "${FILE_MAP[web]}")" ]; then
    echo "$(basename "${FILE_MAP[web]}")" > sb.txt
-   sbb=$(cat sb.txt)   
+   sbb=$(cat sb.txt)
     nohup ./"$sbb" run -c config.json >/dev/null 2>&1 &
     sleep 5
 if pgrep -x "$sbb" > /dev/null; then
@@ -582,7 +581,7 @@ else
     purple "$sbb 主进程已重启"
 fi
 else
-    sbb=$(cat sb.txt)   
+    sbb=$(cat sb.txt)
     nohup ./"$sbb" run -c config.json >/dev/null 2>&1 &
     sleep 5
 if pgrep -x "$sbb" > /dev/null; then
@@ -604,10 +603,10 @@ if [ -e "$(basename "${FILE_MAP[bot]}")" ]; then
    echo "$(basename "${FILE_MAP[bot]}")" > ag.txt
    agg=$(cat ag.txt)
     if [[ $ARGO_AUTH =~ ^[A-Z0-9a-z=]{120,250}$ ]]; then
-      #args="tunnel --edge-ip-version auto --no-autoupdate --protocol http2 run --token ${ARGO_AUTH}"
+
       args="tunnel --no-autoupdate run --token ${ARGO_AUTH}"
     else
-     #args="tunnel --edge-ip-version auto --no-autoupdate --protocol http2 --logfile boot.log --loglevel info --url http://localhost:$vmess_port"
+
      args="tunnel --url http://localhost:$vmess_port --no-autoupdate --logfile boot.log --loglevel info"
     fi
     nohup ./"$agg" $args >/dev/null 2>&1 &
@@ -624,10 +623,10 @@ fi
 else
    agg=$(cat ag.txt)
     if [[ $ARGO_AUTH =~ ^[A-Z0-9a-z=]{120,250}$ ]]; then
-      #args="tunnel --edge-ip-version auto --no-autoupdate --protocol http2 run --token ${ARGO_AUTH}"
+
       args="tunnel --no-autoupdate run --token ${ARGO_AUTH}"
     else
-     #args="tunnel --edge-ip-version auto --no-autoupdate --protocol http2 --logfile boot.log --loglevel info --url http://localhost:$vmess_port"
+
      args="tunnel --url http://localhost:$vmess_port --no-autoupdate --logfile boot.log --loglevel info"
     fi
     pkill -x "$agg"
@@ -666,7 +665,6 @@ yellow "2、RES选择y运行一次重置系统，再改为n（重要）"
 yellow "3、当前Serv00服务器炸了？等会再试"
 red "4、以上都试了，哥直接躺平，交给进程保活，过会再来看"
 fi
-
 
 argodomain=$(get_argodomain)
 rm -rf ${FILE_PATH}/*.txt
@@ -800,7 +798,7 @@ cat > sing_box.json <<EOF
                  "server": "proxydns"
             },
              {
-                "rule_set": "geosite-geolocation-!cn",         
+                "rule_set": "geosite-geolocation-!cn",
                 "query_type": [
                     "A",
                     "AAAA"
@@ -1075,7 +1073,7 @@ dns:
   ipv6: true
   enhanced-mode: fake-ip
   fake-ip-range: 198.18.0.1/16
-  default-nameserver: 
+  default-nameserver:
     - 223.5.5.5
     - 8.8.8.8
   nameserver:
@@ -1091,78 +1089,78 @@ dns:
       - 240.0.0.0/4
 
 proxies:
-- name: vless-reality-vision-$snb-$USERNAME               
+- name: vless-reality-vision-$snb-$USERNAME
   type: vless
-  server: $IP                           
-  port: $vless_port                                
-  uuid: $UUID   
+  server: $IP
+  port: $vless_port
+  uuid: $UUID
   network: tcp
   udp: true
   tls: true
   flow: xtls-rprx-vision
-  servername: $reym                 
-  reality-opts: 
-    public-key: $public_key                      
-  client-fingerprint: chrome                  
+  servername: $reym
+  reality-opts:
+    public-key: $public_key
+  client-fingerprint: chrome
 
-- name: vmess-ws-$snb-$USERNAME                         
+- name: vmess-ws-$snb-$USERNAME
   type: vmess
-  server: $IP                       
-  port: $vmess_port                                     
-  uuid: $UUID       
+  server: $IP
+  port: $vmess_port
+  uuid: $UUID
   alterId: 0
   cipher: auto
   udp: true
   tls: false
   network: ws
-  servername: www.bing.com                    
+  servername: www.bing.com
   ws-opts:
-    path: "/$UUID-vm"                             
+    path: "/$UUID-vm"
     headers:
-      Host: www.bing.com                     
+      Host: www.bing.com
 
-- name: hysteria2-$snb-$USERNAME                            
-  type: hysteria2                                      
-  server: $IP                               
-  port: $hy2_port                                
-  password: $UUID                          
+- name: hysteria2-$snb-$USERNAME
+  type: hysteria2
+  server: $IP
+  port: $hy2_port
+  password: $UUID
   alpn:
     - h3
-  sni: www.bing.com                               
+  sni: www.bing.com
   skip-cert-verify: true
   fast-open: true
 
-- name: vmess-tls-argo-$snb-$USERNAME                         
+- name: vmess-tls-argo-$snb-$USERNAME
   type: vmess
-  server: www.visa.com.hk                        
-  port: 8443                                     
-  uuid: $UUID       
+  server: www.visa.com.hk
+  port: 8443
+  uuid: $UUID
   alterId: 0
   cipher: auto
   udp: true
   tls: true
   network: ws
-  servername: $argodomain                    
+  servername: $argodomain
   ws-opts:
-    path: "/$UUID-vm"                             
+    path: "/$UUID-vm"
     headers:
       Host: $argodomain
 
-- name: vmess-argo-$snb-$USERNAME                         
+- name: vmess-argo-$snb-$USERNAME
   type: vmess
-  server: www.visa.com.hk                        
-  port: 8880                                     
-  uuid: $UUID       
+  server: www.visa.com.hk
+  port: 8880
+  uuid: $UUID
   alterId: 0
   cipher: auto
   udp: true
   tls: false
   network: ws
-  servername: $argodomain                   
+  servername: $argodomain
   ws-opts:
-    path: "/$UUID-vm"                             
+    path: "/$UUID-vm"
     headers:
-      Host: $argodomain 
+      Host: $argodomain
 
 proxy-groups:
 - name: Balance
@@ -1171,7 +1169,7 @@ proxy-groups:
   interval: 300
   strategy: round-robin
   proxies:
-    - vless-reality-vision-$snb-$USERNAME                              
+    - vless-reality-vision-$snb-$USERNAME
     - vmess-ws-$snb-$USERNAME
     - hysteria2-$snb-$USERNAME
     - vmess-tls-argo-$snb-$USERNAME
@@ -1183,19 +1181,19 @@ proxy-groups:
   interval: 300
   tolerance: 50
   proxies:
-    - vless-reality-vision-$snb-$USERNAME                             
+    - vless-reality-vision-$snb-$USERNAME
     - vmess-ws-$snb-$USERNAME
     - hysteria2-$snb-$USERNAME
     - vmess-tls-argo-$snb-$USERNAME
     - vmess-argo-$snb-$USERNAME
-    
+
 - name: Select
   type: select
   proxies:
-    - Balance                                         
+    - Balance
     - Auto
     - DIRECT
-    - vless-reality-vision-$snb-$USERNAME                              
+    - vless-reality-vision-$snb-$USERNAME
     - vmess-ws-$snb-$USERNAME
     - hysteria2-$snb-$USERNAME
     - vmess-tls-argo-$snb-$USERNAME
@@ -1204,12 +1202,12 @@ rules:
   - GEOIP,LAN,DIRECT
   - GEOIP,CN,DIRECT
   - MATCH,Select
-  
+
 EOF
 
 cat clash_meta.yaml > ${FILE_PATH}/${UUID}_clashmeta.txt
 cat sing_box.json > ${FILE_PATH}/${UUID}_singbox.txt
-curl -sL https://raw.githubusercontent.com/yonggekkk/sing-box-yg/main/index.html -o "$FILE_PATH"/index.html
+curl -sL https://raw.githubusercontent.com/GamblerIX/singbox/main/index.html -o "$FILE_PATH"/index.html
 V2rayN_LINK="https://${USERNAME}.serv00.net/${UUID}_v2sub.txt"
 Clashmeta_LINK="https://${USERNAME}.serv00.net/${UUID}_clashmeta.txt"
 Singbox_LINK="https://${USERNAME}.serv00.net/${UUID}_singbox.txt"
@@ -1243,7 +1241,7 @@ $vl_link
 注意：如果之前输入的reality域名为CF域名，将激活以下功能：
 可应用在 https://github.com/yonggekkk/Cloudflare_vless_trojan 项目中创建CF vless/trojan 节点
 1、Proxyip(带端口)信息如下：
-方式一全局应用：设置变量名：proxyip    设置变量值：$IP:$vless_port  
+方式一全局应用：设置变量名：proxyip    设置变量值：$IP:$vless_port
 方式二单节点应用：path路径改为：/pyip=$IP:$vless_port
 CF节点的TLS可开可关
 CF节点落地到CF网站的地区为：$IP所在地区
@@ -1257,14 +1255,13 @@ CF节点落地到非CF网站的地区为：$IP所在地区
 注：可能有大佬会扫Serv00的反代IP作为其共享IP库或者出售，请慎重将reality域名设置为CF域名
 -------------------------------------------------------------------------------------------------
 
-
 二、Vmess-ws分享链接三形态如下：
 
 1、Vmess-ws主节点分享链接如下：
 (该节点默认不支持CDN，如果设置为CDN回源(需域名)：客户端地址可自行修改优选IP/域名，7个80系端口随便换，被墙依旧能用！)
 $vmws_link
 
-2、Vmess-ws-tls_Argo分享链接如下： 
+2、Vmess-ws-tls_Argo分享链接如下：
 (该节点为CDN优选IP节点，客户端地址可自行修改优选IP/域名，6个443系端口随便换，被墙依旧能用！)
 $vmatls_link
 
@@ -1273,11 +1270,9 @@ $vmatls_link
 $vma_link
 -------------------------------------------------------------------------------------------------
 
-
 三、HY2分享链接如下：
 $hy2_link
 -------------------------------------------------------------------------------------------------
-
 
 四、聚合通用节点，共计22个节点：
 3个IP全覆盖：3个reality、3个vmess+ws、3个hy2
@@ -1289,7 +1284,6 @@ $V2rayN_LINK
 剪切分享码：
 $baseurl
 -------------------------------------------------------------------------------------------------
-
 
 五、查看Sing-box与Clash-meta的订阅配置文件，请进入主菜单选择4
 

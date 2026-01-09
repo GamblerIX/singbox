@@ -13,7 +13,7 @@ blue(){ echo -e "\033[36m\033[01m$1\033[0m";}
 white(){ echo -e "\033[37m\033[01m$1\033[0m";}
 readp(){ read -p "$(yellow "$1")" $2;}
 [[ $EUID -ne 0 ]] && yellow "请以root模式运行脚本" && exit
-#[[ -e /etc/hosts ]] && grep -qE '^ *172.65.251.78 gitlab.com' /etc/hosts || echo -e '\n172.65.251.78 gitlab.com' >> /etc/hosts
+
 if [[ -f /etc/redhat-release ]]; then
 release="Centos"
 elif cat /etc/issue | grep -q -E -i "alpine"; then
@@ -30,14 +30,14 @@ elif cat /proc/version | grep -q -E -i "ubuntu"; then
 release="Ubuntu"
 elif cat /proc/version | grep -q -E -i "centos|red hat|redhat"; then
 release="Centos"
-else 
+else
 red "脚本不支持当前的系统，请选择使用Ubuntu,Debian,Centos系统。" && exit
 fi
 export sbfiles="/etc/s-box/sb10.json /etc/s-box/sb11.json /etc/s-box/sb.json"
 export sbnh=$(/etc/s-box/sing-box version 2>/dev/null | awk '/version/{print $NF}' | cut -d '.' -f 1,2)
 vsid=$(grep -i version_id /etc/os-release | cut -d \" -f2 | cut -d . -f1)
 op=$(cat /etc/redhat-release 2>/dev/null || cat /etc/os-release 2>/dev/null | grep -i pretty_name | cut -d \" -f2)
-#if [[ $(echo "$op" | grep -i -E "arch|alpine") ]]; then
+
 if [[ $(echo "$op" | grep -i -E "arch") ]]; then
 red "脚本不支持当前的 $op 系统，请选择使用Ubuntu,Debian,Centos系统。" && exit
 fi
@@ -49,15 +49,7 @@ aarch64) cpu=arm64;;
 x86_64) cpu=amd64;;
 *) red "目前脚本不支持$(uname -m)架构" && exit;;
 esac
-#bit=$(uname -m)
-#if [[ $bit = "aarch64" ]]; then
-#cpu="arm64"
-#elif [[ $bit = "x86_64" ]]; then
-#amdv=$(cat /proc/cpuinfo | grep flags | head -n 1 | cut -d: -f2)
-#[[ $amdv == *avx2* && $amdv == *f16c* ]] && cpu="amd64v3" || cpu="amd64"
-#else
-#red "目前脚本不支持 $bit 架构" && exit
-#fi
+
 if [[ -n $(sysctl net.ipv4.tcp_congestion_control 2>/dev/null | awk -F ' ' '{print $3}') ]]; then
 bbr=`sysctl net.ipv4.tcp_congestion_control | awk -F ' ' '{print $3}'`
 elif [[ -n $(ping 10.0.0.2 -c 2 | grep ttl) ]]; then
@@ -71,11 +63,11 @@ if [ ! -f sbyg_update ]; then
 green "首次安装Sing-box-yg脚本必要的依赖……"
 if [[ x"${release}" == x"alpine" ]]; then
 apk update
-apk add jq openssl iproute2 iputils coreutils expect git socat iptables grep util-linux dcron tar tzdata 
+apk add jq openssl iproute2 iputils coreutils expect git socat iptables grep util-linux dcron tar tzdata
 apk add virt-what
 else
 if [[ $release = Centos && ${vsid} =~ 8 ]]; then
-cd /etc/yum.repos.d/ && mkdir backup && mv *repo backup/ 
+cd /etc/yum.repos.d/ && mkdir backup && mv *repo backup/
 curl -o /etc/yum.repos.d/CentOS-Base.repo http://mirrors.aliyun.com/repo/Centos-8.repo
 sed -i -e "s|mirrors.cloud.aliyuncs.com|mirrors.aliyun.com|g " /etc/yum.repos.d/CentOS-*
 sed -i -e "s|releasever|releasever-stream|g" /etc/yum.repos.d/CentOS-*
@@ -126,11 +118,11 @@ fi
 
 if [[ $vi = openvz ]]; then
 TUN=$(cat /dev/net/tun 2>&1)
-if [[ ! $TUN =~ 'in bad state' ]] && [[ ! $TUN =~ '处于错误状态' ]] && [[ ! $TUN =~ 'Die Dateizugriffsnummer ist in schlechter Verfassung' ]]; then 
+if [[ ! $TUN =~ 'in bad state' ]] && [[ ! $TUN =~ '处于错误状态' ]] && [[ ! $TUN =~ 'Die Dateizugriffsnummer ist in schlechter Verfassung' ]]; then
 red "检测到未开启TUN，现尝试添加TUN支持" && sleep 4
 cd /dev && mkdir net && mknod net/tun c 10 200 && chmod 0666 net/tun
 TUN=$(cat /dev/net/tun 2>&1)
-if [[ ! $TUN =~ 'in bad state' ]] && [[ ! $TUN =~ '处于错误状态' ]] && [[ ! $TUN =~ 'Die Dateizugriffsnummer ist in schlechter Verfassung' ]]; then 
+if [[ ! $TUN =~ 'in bad state' ]] && [[ ! $TUN =~ '处于错误状态' ]] && [[ ! $TUN =~ 'Die Dateizugriffsnummer ist in schlechter Verfassung' ]]; then
 green "添加TUN支持失败，建议与VPS厂商沟通或后台设置开启" && exit
 else
 echo '#!/bin/bash' > /root/tun.sh && echo 'cd /dev && mkdir net && mknod net/tun c 10 200 && chmod 0666 net/tun' >> /root/tun.sh && chmod +x /root/tun.sh
@@ -227,7 +219,7 @@ yellow "1：使用1.10系列之后最新正式版内核 (回车默认)"
 yellow "2：使用1.10.7正式版内核"
 readp "请选择【1-2】：" menu
 if [ -z "$menu" ] || [ "$menu" = "1" ] ; then
-#sbcore=$(curl -Ls https://data.jsdelivr.com/v1/package/gh/SagerNet/sing-box | grep -Eo '"[0-9.]+",' | sed -n 1p | tr -d '",')
+
 sbcore="1.12.15"
 else
 sbcore=$(curl -Ls https://data.jsdelivr.com/v1/package/gh/SagerNet/sing-box | grep -Eo '"1\.10[0-9\.]*",'  | sed -n 1p | tr -d '",')
@@ -315,7 +307,7 @@ zqzs
 else
 bash <(curl -Ls https://raw.githubusercontent.com/yonggekkk/acme-yg/main/acme.sh)
 if [[ ! -f /root/ygkkkca/cert.crt && ! -f /root/ygkkkca/private.key && ! -s /root/ygkkkca/cert.crt && ! -s /root/ygkkkca/private.key ]]; then
-red "Acme证书申请失败，继续使用自签证书" 
+red "Acme证书申请失败，继续使用自签证书"
 zqzs
 else
 ymzs
@@ -327,7 +319,7 @@ fi
 chooseport(){
 if [[ -z $port ]]; then
 port=$(shuf -i 10000-65535 -n 1)
-until [[ -z $(ss -tunlp | grep -w udp | awk '{print $5}' | sed 's/.*://g' | grep -w "$port") && -z $(ss -tunlp | grep -w tcp | awk '{print $5}' | sed 's/.*://g' | grep -w "$port") ]] 
+until [[ -z $(ss -tunlp | grep -w udp | awk '{print $5}' | sed 's/.*://g' | grep -w "$port") && -z $(ss -tunlp | grep -w tcp | awk '{print $5}' | sed 's/.*://g' | grep -w "$port") ]]
 do
 [[ -n $(ss -tunlp | grep -w udp | awk '{print $5}' | sed 's/.*://g' | grep -w "$port") || -n $(ss -tunlp | grep -w tcp | awk '{print $5}' | sed 's/.*://g' | grep -w "$port") ]] && yellow "\n端口被占用，请重新输入端口" && readp "自定义端口:" port
 done
@@ -470,7 +462,7 @@ cat > /etc/s-box/sb10.json <<EOF
             "type": "ws",
             "path": "${uuid}-vm",
             "max_early_data":2048,
-            "early_data_header_name": "Sec-WebSocket-Protocol"    
+            "early_data_header_name": "Sec-WebSocket-Protocol"
         },
         "tls":{
                 "enabled": ${tlsyn},
@@ -478,7 +470,7 @@ cat > /etc/s-box/sb10.json <<EOF
                 "certificate_path": "$certificatec_vmess_ws",
                 "key_path": "$certificatep_vmess_ws"
             }
-    }, 
+    },
     {
         "type": "hysteria2",
         "sniff": true,
@@ -533,7 +525,7 @@ cat > /etc/s-box/sb10.json <<EOF
 },
 {
 "type":"direct",
-"tag": "vps-outbound-v4", 
+"tag": "vps-outbound-v4",
 "domain_strategy":"prefer_ipv4"
 },
 {
@@ -673,7 +665,7 @@ cat > /etc/s-box/sb11.json <<EOF
     {
       "type": "vless",
 
-      
+
       "tag": "vless-sb",
       "listen": "::",
       "listen_port": ${port_vl_re},
@@ -700,7 +692,7 @@ cat > /etc/s-box/sb11.json <<EOF
 {
         "type": "vmess",
 
- 
+
         "tag": "vmess-sb",
         "listen": "::",
         "listen_port": ${port_vm_ws},
@@ -714,7 +706,7 @@ cat > /etc/s-box/sb11.json <<EOF
             "type": "ws",
             "path": "${uuid}-vm",
             "max_early_data":2048,
-            "early_data_header_name": "Sec-WebSocket-Protocol"    
+            "early_data_header_name": "Sec-WebSocket-Protocol"
         },
         "tls":{
                 "enabled": ${tlsyn},
@@ -722,11 +714,11 @@ cat > /etc/s-box/sb11.json <<EOF
                 "certificate_path": "$certificatec_vmess_ws",
                 "key_path": "$certificatep_vmess_ws"
             }
-    }, 
+    },
     {
         "type": "hysteria2",
 
- 
+
         "tag": "hy2-sb",
         "listen": "::",
         "listen_port": ${port_hy2},
@@ -748,7 +740,7 @@ cat > /etc/s-box/sb11.json <<EOF
         {
             "type":"tuic",
 
-     
+
             "tag": "tuic5-sb",
             "listen": "::",
             "listen_port": ${port_tu},
@@ -800,7 +792,7 @@ cat > /etc/s-box/sb11.json <<EOF
 },
 {
 "type":"direct",
-"tag":"vps-outbound-v4", 
+"tag":"vps-outbound-v4",
 "domain_strategy":"prefer_ipv4"
 },
 {
@@ -1143,7 +1135,7 @@ echo
 reshy2(){
 echo
 white "~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~"
-#hy2_link="hysteria2://$uuid@$sb_hy2_ip:$hy2_port?security=tls&alpn=h3&insecure=$ins_hy2&mport=$hyps&sni=$hy2_name#hy2-$hostname"
+
 hy2_link="hysteria2://$uuid@$sb_hy2_ip:$hy2_port?security=tls&alpn=h3&insecure=$ins_hy2&sni=$hy2_name#hy2-$hostname"
 echo "$hy2_link" > /etc/s-box/hy2.txt
 red "🚀【 Hysteria-2 】节点信息如下：" && sleep 2
@@ -1239,7 +1231,7 @@ cat > /etc/s-box/sing_box_client.json <<EOF
                  "server": "proxydns"
             },
              {
-                "rule_set": "geosite-geolocation-!cn",         
+                "rule_set": "geosite-geolocation-!cn",
                 "query_type": [
                     "A",
                     "AAAA"
@@ -1595,7 +1587,7 @@ dns:
   ipv6: true
   enhanced-mode: fake-ip
   fake-ip-range: 198.18.0.1/16
-  default-nameserver: 
+  default-nameserver:
     - 223.5.5.5
     - 8.8.8.8
   nameserver:
@@ -1611,126 +1603,125 @@ dns:
       - 240.0.0.0/4
 
 proxies:
-- name: vless-reality-vision-$hostname               
+- name: vless-reality-vision-$hostname
   type: vless
-  server: $server_ipcl                           
-  port: $vl_port                                
-  uuid: $uuid   
+  server: $server_ipcl
+  port: $vl_port
+  uuid: $uuid
   network: tcp
   udp: true
   tls: true
   flow: xtls-rprx-vision
-  servername: $vl_name                 
-  reality-opts: 
-    public-key: $public_key    
-    short-id: $short_id                      
-  client-fingerprint: chrome                  
+  servername: $vl_name
+  reality-opts:
+    public-key: $public_key
+    short-id: $short_id
+  client-fingerprint: chrome
 
-- name: vmess-ws-$hostname                         
+- name: vmess-ws-$hostname
   type: vmess
-  server: $vmadd_local                        
-  port: $vm_port                                     
-  uuid: $uuid       
+  server: $vmadd_local
+  port: $vm_port
+  uuid: $uuid
   alterId: 0
   cipher: auto
   udp: true
   tls: $tls
   network: ws
-  servername: $vm_name                    
+  servername: $vm_name
   ws-opts:
-    path: "$ws_path"                             
+    path: "$ws_path"
     headers:
-      Host: $vm_name                     
+      Host: $vm_name
 
-- name: hysteria2-$hostname                            
-  type: hysteria2                                      
-  server: $cl_hy2_ip                               
-  port: $hy2_port                                
-  password: $uuid                          
+- name: hysteria2-$hostname
+  type: hysteria2
+  server: $cl_hy2_ip
+  port: $hy2_port
+  password: $uuid
   alpn:
     - h3
-  sni: $hy2_name                               
+  sni: $hy2_name
   skip-cert-verify: $hy2_ins
   fast-open: true
 
-- name: tuic5-$hostname                            
-  server: $cl_tu5_ip                      
-  port: $tu5_port                                    
+- name: tuic5-$hostname
+  server: $cl_tu5_ip
+  port: $tu5_port
   type: tuic
-  uuid: $uuid       
-  password: $uuid   
+  uuid: $uuid
+  password: $uuid
   alpn: [h3]
   disable-sni: true
   reduce-rtt: true
   udp-relay-mode: native
   congestion-controller: bbr
-  sni: $tu5_name                                
+  sni: $tu5_name
   skip-cert-verify: $tu5_ins
 
-- name: vmess-tls-argo固定-$hostname                         
+- name: vmess-tls-argo固定-$hostname
   type: vmess
-  server: $vmadd_argo                        
-  port: 8443                                     
-  uuid: $uuid       
+  server: $vmadd_argo
+  port: 8443
+  uuid: $uuid
   alterId: 0
   cipher: auto
   udp: true
   tls: true
   network: ws
-  servername: $argogd                    
+  servername: $argogd
   ws-opts:
-    path: "$ws_path"                             
+    path: "$ws_path"
     headers:
       Host: $argogd
 
-
-- name: vmess-argo固定-$hostname                         
+- name: vmess-argo固定-$hostname
   type: vmess
-  server: $vmadd_argo                        
-  port: 8880                                     
-  uuid: $uuid       
+  server: $vmadd_argo
+  port: 8880
+  uuid: $uuid
   alterId: 0
   cipher: auto
   udp: true
   tls: false
   network: ws
-  servername: $argogd                    
+  servername: $argogd
   ws-opts:
-    path: "$ws_path"                             
+    path: "$ws_path"
     headers:
       Host: $argogd
 
-- name: vmess-tls-argo临时-$hostname                         
+- name: vmess-tls-argo临时-$hostname
   type: vmess
-  server: $vmadd_argo                        
-  port: 8443                                     
-  uuid: $uuid       
+  server: $vmadd_argo
+  port: 8443
+  uuid: $uuid
   alterId: 0
   cipher: auto
   udp: true
   tls: true
   network: ws
-  servername: $argo                    
+  servername: $argo
   ws-opts:
-    path: "$ws_path"                             
+    path: "$ws_path"
     headers:
       Host: $argo
 
-- name: vmess-argo临时-$hostname                         
+- name: vmess-argo临时-$hostname
   type: vmess
-  server: $vmadd_argo                        
-  port: 8880                                     
-  uuid: $uuid       
+  server: $vmadd_argo
+  port: 8880
+  uuid: $uuid
   alterId: 0
   cipher: auto
   udp: true
   tls: false
   network: ws
-  servername: $argo                    
+  servername: $argo
   ws-opts:
-    path: "$ws_path"                             
+    path: "$ws_path"
     headers:
-      Host: $argo 
+      Host: $argo
 
 proxy-groups:
 - name: 负载均衡
@@ -1739,7 +1730,7 @@ proxy-groups:
   interval: 300
   strategy: round-robin
   proxies:
-    - vless-reality-vision-$hostname                              
+    - vless-reality-vision-$hostname
     - vmess-ws-$hostname
     - hysteria2-$hostname
     - tuic5-$hostname
@@ -1754,7 +1745,7 @@ proxy-groups:
   interval: 300
   tolerance: 50
   proxies:
-    - vless-reality-vision-$hostname                              
+    - vless-reality-vision-$hostname
     - vmess-ws-$hostname
     - hysteria2-$hostname
     - tuic5-$hostname
@@ -1762,14 +1753,14 @@ proxy-groups:
     - vmess-argo固定-$hostname
     - vmess-tls-argo临时-$hostname
     - vmess-argo临时-$hostname
-    
+
 - name: 🌍选择代理节点
   type: select
   proxies:
-    - 负载均衡                                         
+    - 负载均衡
     - 自动选择
     - DIRECT
-    - vless-reality-vision-$hostname                              
+    - vless-reality-vision-$hostname
     - vmess-ws-$hostname
     - hysteria2-$hostname
     - tuic5-$hostname
@@ -1782,7 +1773,6 @@ rules:
   - GEOIP,CN,DIRECT
   - MATCH,🌍选择代理节点
 EOF
-
 
 elif [[ ! -n $(ps -e | grep -w $ym 2>/dev/null) && -n $(ps -e | grep -w $ls 2>/dev/null) && "$tls" = "false" ]]; then
 cat > /etc/s-box/sing_box_client.json <<EOF
@@ -1847,7 +1837,7 @@ cat > /etc/s-box/sing_box_client.json <<EOF
                  "server": "proxydns"
             },
              {
-                "rule_set": "geosite-geolocation-!cn",         
+                "rule_set": "geosite-geolocation-!cn",
                 "query_type": [
                     "A",
                     "AAAA"
@@ -2145,7 +2135,7 @@ dns:
   ipv6: true
   enhanced-mode: fake-ip
   fake-ip-range: 198.18.0.1/16
-  default-nameserver: 
+  default-nameserver:
     - 223.5.5.5
     - 8.8.8.8
   nameserver:
@@ -2161,101 +2151,93 @@ dns:
       - 240.0.0.0/4
 
 proxies:
-- name: vless-reality-vision-$hostname               
+- name: vless-reality-vision-$hostname
   type: vless
-  server: $server_ipcl                           
-  port: $vl_port                                
-  uuid: $uuid   
+  server: $server_ipcl
+  port: $vl_port
+  uuid: $uuid
   network: tcp
   udp: true
   tls: true
   flow: xtls-rprx-vision
-  servername: $vl_name                 
-  reality-opts: 
-    public-key: $public_key    
-    short-id: $short_id                      
-  client-fingerprint: chrome                  
+  servername: $vl_name
+  reality-opts:
+    public-key: $public_key
+    short-id: $short_id
+  client-fingerprint: chrome
 
-- name: vmess-ws-$hostname                         
+- name: vmess-ws-$hostname
   type: vmess
-  server: $vmadd_local                        
-  port: $vm_port                                     
-  uuid: $uuid       
+  server: $vmadd_local
+  port: $vm_port
+  uuid: $uuid
   alterId: 0
   cipher: auto
   udp: true
   tls: $tls
   network: ws
-  servername: $vm_name                    
+  servername: $vm_name
   ws-opts:
-    path: "$ws_path"                             
+    path: "$ws_path"
     headers:
-      Host: $vm_name                     
+      Host: $vm_name
 
-- name: hysteria2-$hostname                            
-  type: hysteria2                                      
-  server: $cl_hy2_ip                               
-  port: $hy2_port                                
-  password: $uuid                          
+- name: hysteria2-$hostname
+  type: hysteria2
+  server: $cl_hy2_ip
+  port: $hy2_port
+  password: $uuid
   alpn:
     - h3
-  sni: $hy2_name                               
+  sni: $hy2_name
   skip-cert-verify: $hy2_ins
   fast-open: true
 
-- name: tuic5-$hostname                            
-  server: $cl_tu5_ip                      
-  port: $tu5_port                                    
+- name: tuic5-$hostname
+  server: $cl_tu5_ip
+  port: $tu5_port
   type: tuic
-  uuid: $uuid       
-  password: $uuid   
+  uuid: $uuid
+  password: $uuid
   alpn: [h3]
   disable-sni: true
   reduce-rtt: true
   udp-relay-mode: native
   congestion-controller: bbr
-  sni: $tu5_name                                
+  sni: $tu5_name
   skip-cert-verify: $tu5_ins
 
-
-
-
-
-
-
-
-
-- name: vmess-tls-argo临时-$hostname                         
+- name: vmess-tls-argo临时-$hostname
   type: vmess
-  server: $vmadd_argo                        
-  port: 8443                                     
-  uuid: $uuid       
+  server: $vmadd_argo
+  port: 8443
+  uuid: $uuid
   alterId: 0
   cipher: auto
   udp: true
   tls: true
   network: ws
-  servername: $argo                    
+  servername: $argo
   ws-opts:
-    path: "$ws_path"                             
+    path: "$ws_path"
     headers:
       Host: $argo
 
-- name: vmess-argo临时-$hostname                         
+- name: vmess-argo临时-$hostname
   type: vmess
-  server: $vmadd_argo                        
-  port: 8880                                     
-  uuid: $uuid       
+  server: $vmadd_argo
+  port: 8880
+  uuid: $uuid
   alterId: 0
   cipher: auto
   udp: true
   tls: false
   network: ws
-  servername: $argo                    
+  servername: $argo
   ws-opts:
-    path: "$ws_path"                             
+    path: "$ws_path"
     headers:
-      Host: $argo 
+      Host: $argo
 
 proxy-groups:
 - name: 负载均衡
@@ -2264,7 +2246,7 @@ proxy-groups:
   interval: 300
   strategy: round-robin
   proxies:
-    - vless-reality-vision-$hostname                              
+    - vless-reality-vision-$hostname
     - vmess-ws-$hostname
     - hysteria2-$hostname
     - tuic5-$hostname
@@ -2277,20 +2259,20 @@ proxy-groups:
   interval: 300
   tolerance: 50
   proxies:
-    - vless-reality-vision-$hostname                              
+    - vless-reality-vision-$hostname
     - vmess-ws-$hostname
     - hysteria2-$hostname
     - tuic5-$hostname
     - vmess-tls-argo临时-$hostname
     - vmess-argo临时-$hostname
-    
+
 - name: 🌍选择代理节点
   type: select
   proxies:
-    - 负载均衡                                         
+    - 负载均衡
     - 自动选择
     - DIRECT
-    - vless-reality-vision-$hostname                              
+    - vless-reality-vision-$hostname
     - vmess-ws-$hostname
     - hysteria2-$hostname
     - tuic5-$hostname
@@ -2365,7 +2347,7 @@ cat > /etc/s-box/sing_box_client.json <<EOF
                  "server": "proxydns"
             },
              {
-                "rule_set": "geosite-geolocation-!cn",         
+                "rule_set": "geosite-geolocation-!cn",
                 "query_type": [
                     "A",
                     "AAAA"
@@ -2663,7 +2645,7 @@ dns:
   ipv6: true
   enhanced-mode: fake-ip
   fake-ip-range: 198.18.0.1/16
-  default-nameserver: 
+  default-nameserver:
     - 223.5.5.5
     - 8.8.8.8
   nameserver:
@@ -2679,97 +2661,91 @@ dns:
       - 240.0.0.0/4
 
 proxies:
-- name: vless-reality-vision-$hostname               
+- name: vless-reality-vision-$hostname
   type: vless
-  server: $server_ipcl                           
-  port: $vl_port                                
-  uuid: $uuid   
+  server: $server_ipcl
+  port: $vl_port
+  uuid: $uuid
   network: tcp
   udp: true
   tls: true
   flow: xtls-rprx-vision
-  servername: $vl_name                 
-  reality-opts: 
-    public-key: $public_key    
-    short-id: $short_id                      
-  client-fingerprint: chrome                  
+  servername: $vl_name
+  reality-opts:
+    public-key: $public_key
+    short-id: $short_id
+  client-fingerprint: chrome
 
-- name: vmess-ws-$hostname                         
+- name: vmess-ws-$hostname
   type: vmess
-  server: $vmadd_local                        
-  port: $vm_port                                     
-  uuid: $uuid       
+  server: $vmadd_local
+  port: $vm_port
+  uuid: $uuid
   alterId: 0
   cipher: auto
   udp: true
   tls: $tls
   network: ws
-  servername: $vm_name                    
+  servername: $vm_name
   ws-opts:
-    path: "$ws_path"                             
+    path: "$ws_path"
     headers:
-      Host: $vm_name                     
+      Host: $vm_name
 
-- name: hysteria2-$hostname                            
-  type: hysteria2                                      
-  server: $cl_hy2_ip                               
-  port: $hy2_port                                
-  password: $uuid                          
+- name: hysteria2-$hostname
+  type: hysteria2
+  server: $cl_hy2_ip
+  port: $hy2_port
+  password: $uuid
   alpn:
     - h3
-  sni: $hy2_name                               
+  sni: $hy2_name
   skip-cert-verify: $hy2_ins
   fast-open: true
 
-- name: tuic5-$hostname                            
-  server: $cl_tu5_ip                      
-  port: $tu5_port                                    
+- name: tuic5-$hostname
+  server: $cl_tu5_ip
+  port: $tu5_port
   type: tuic
-  uuid: $uuid       
-  password: $uuid   
+  uuid: $uuid
+  password: $uuid
   alpn: [h3]
   disable-sni: true
   reduce-rtt: true
   udp-relay-mode: native
   congestion-controller: bbr
-  sni: $tu5_name                                
+  sni: $tu5_name
   skip-cert-verify: $tu5_ins
 
-
-
-
-
-
-
-- name: vmess-tls-argo固定-$hostname                         
+- name: vmess-tls-argo固定-$hostname
   type: vmess
-  server: $vmadd_argo                        
-  port: 8443                                     
-  uuid: $uuid       
+  server: $vmadd_argo
+  port: 8443
+  uuid: $uuid
   alterId: 0
   cipher: auto
   udp: true
   tls: true
   network: ws
-  servername: $argogd                    
+  servername: $argogd
   ws-opts:
-    path: "$ws_path"                             
+    path: "$ws_path"
     headers:
       Host: $argogd
 
-- name: vmess-argo固定-$hostname                         
+- name: vmess-argo固定-$hostname
   type: vmess
-  server: $vmadd_argo                        
-  port: 8880                                     
-  uuid: $uuid       
+  server: $vmadd_argo
+  port: 8880
+  uuid: $uuid
   alterId: 0
   cipher: auto
   udp: true
   tls: false
   network: ws
-  servername: $argogd                    
+  servername: $argogd
   ws-opts:
-    path: "$ws_path"                             
+    path: "$ws_path"
     headers:
       Host: $argogd
 
@@ -2780,7 +2756,7 @@ proxy-groups:
   interval: 300
   strategy: round-robin
   proxies:
-    - vless-reality-vision-$hostname                              
+    - vless-reality-vision-$hostname
     - vmess-ws-$hostname
     - hysteria2-$hostname
     - tuic5-$hostname
@@ -2793,20 +2769,20 @@ proxy-groups:
   interval: 300
   tolerance: 50
   proxies:
-    - vless-reality-vision-$hostname                              
+    - vless-reality-vision-$hostname
     - vmess-ws-$hostname
     - hysteria2-$hostname
     - tuic5-$hostname
     - vmess-tls-argo固定-$hostname
     - vmess-argo固定-$hostname
-    
+
 - name: 🌍选择代理节点
   type: select
   proxies:
-    - 负载均衡                                         
+    - 负载均衡
     - 自动选择
     - DIRECT
-    - vless-reality-vision-$hostname                              
+    - vless-reality-vision-$hostname
     - vmess-ws-$hostname
     - hysteria2-$hostname
     - tuic5-$hostname
@@ -2881,7 +2857,7 @@ cat > /etc/s-box/sing_box_client.json <<EOF
                  "server": "proxydns"
             },
              {
-                "rule_set": "geosite-geolocation-!cn",         
+                "rule_set": "geosite-geolocation-!cn",
                 "query_type": [
                     "A",
                     "AAAA"
@@ -3121,7 +3097,7 @@ dns:
   ipv6: true
   enhanced-mode: fake-ip
   fake-ip-range: 198.18.0.1/16
-  default-nameserver: 
+  default-nameserver:
     - 223.5.5.5
     - 8.8.8.8
   nameserver:
@@ -3137,64 +3113,60 @@ dns:
       - 240.0.0.0/4
 
 proxies:
-- name: vless-reality-vision-$hostname               
+- name: vless-reality-vision-$hostname
   type: vless
-  server: $server_ipcl                           
-  port: $vl_port                                
-  uuid: $uuid   
+  server: $server_ipcl
+  port: $vl_port
+  uuid: $uuid
   network: tcp
   udp: true
   tls: true
   flow: xtls-rprx-vision
-  servername: $vl_name                 
-  reality-opts: 
-    public-key: $public_key    
-    short-id: $short_id                    
-  client-fingerprint: chrome                  
+  servername: $vl_name
+  reality-opts:
+    public-key: $public_key
+    short-id: $short_id
+  client-fingerprint: chrome
 
-- name: vmess-ws-$hostname                         
+- name: vmess-ws-$hostname
   type: vmess
-  server: $vmadd_local                        
-  port: $vm_port                                     
-  uuid: $uuid       
+  server: $vmadd_local
+  port: $vm_port
+  uuid: $uuid
   alterId: 0
   cipher: auto
   udp: true
   tls: $tls
   network: ws
-  servername: $vm_name                    
+  servername: $vm_name
   ws-opts:
-    path: "$ws_path"                             
+    path: "$ws_path"
     headers:
-      Host: $vm_name                     
+      Host: $vm_name
 
-
-
-
-
-- name: hysteria2-$hostname                            
-  type: hysteria2                                      
-  server: $cl_hy2_ip                               
-  port: $hy2_port                                
-  password: $uuid                          
+- name: hysteria2-$hostname
+  type: hysteria2
+  server: $cl_hy2_ip
+  port: $hy2_port
+  password: $uuid
   alpn:
     - h3
-  sni: $hy2_name                               
+  sni: $hy2_name
   skip-cert-verify: $hy2_ins
   fast-open: true
 
-- name: tuic5-$hostname                            
-  server: $cl_tu5_ip                      
-  port: $tu5_port                                    
+- name: tuic5-$hostname
+  server: $cl_tu5_ip
+  port: $tu5_port
   type: tuic
-  uuid: $uuid       
-  password: $uuid   
+  uuid: $uuid
+  password: $uuid
   alpn: [h3]
   disable-sni: true
   reduce-rtt: true
   udp-relay-mode: native
   congestion-controller: bbr
-  sni: $tu5_name                                
+  sni: $tu5_name
   skip-cert-verify: $tu5_ins
 
 proxy-groups:
@@ -3204,7 +3176,7 @@ proxy-groups:
   interval: 300
   strategy: round-robin
   proxies:
-    - vless-reality-vision-$hostname                              
+    - vless-reality-vision-$hostname
     - vmess-ws-$hostname
     - hysteria2-$hostname
     - tuic5-$hostname
@@ -3215,18 +3187,18 @@ proxy-groups:
   interval: 300
   tolerance: 50
   proxies:
-    - vless-reality-vision-$hostname                              
+    - vless-reality-vision-$hostname
     - vmess-ws-$hostname
     - hysteria2-$hostname
     - tuic5-$hostname
-    
+
 - name: 🌍选择代理节点
   type: select
   proxies:
-    - 负载均衡                                         
+    - 负载均衡
     - 自动选择
     - DIRECT
-    - vless-reality-vision-$hostname                              
+    - vless-reality-vision-$hostname
     - vmess-ws-$hostname
     - hysteria2-$hostname
     - tuic5-$hostname
@@ -3303,7 +3275,7 @@ aarch64) cpu=arm64;;
 x86_64) cpu=amd64;;
 esac
 curl -L -o /etc/s-box/cloudflared -# --retry 2 https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-$cpu
-#curl -L -o /etc/s-box/cloudflared -# --retry 2 https://gitlab.com/rwkgyg/sing-box-yg/-/raw/main/$cpu
+
 chmod +x /etc/s-box/cloudflared
 fi
 }
@@ -3425,8 +3397,8 @@ warpwg
 inssbjsonser
 sbservice
 sbactive
-#curl -sL https://gitlab.com/rwkgyg/sing-box-yg/-/raw/main/version/version | awk -F "更新内容" '{print $1}' | head -n 1 > /etc/s-box/v
-curl -sL https://raw.githubusercontent.com/yonggekkk/sing-box-yg/main/version | awk -F "更新内容" '{print $1}' | head -n 1 > /etc/s-box/v
+
+curl -sL https://raw.githubusercontent.com/GamblerIX/singbox/main/version | awk -F "更新内容" '{print $1}' | head -n 1 > /etc/s-box/v
 red "~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~"
 lnsb && blue "Sing-box-yg脚本安装成功，脚本快捷方式：sb" && cronsb
 echo
@@ -3749,7 +3721,7 @@ uuid=$menu
 fi
 echo $sbfiles | xargs -n1 sed -i "s/$olduuid/$uuid/g"
 restartsb
-blue "已确认uuid (密码)：${uuid}" 
+blue "已确认uuid (密码)：${uuid}"
 blue "已确认Vmess的path路径：$(sed 's://.*::g' /etc/s-box/sb.json | jq -r '.inbounds[1].transport.path')"
 elif [ "$menu" = "2" ]; then
 readp "输入Vmess的path路径，回车表示不变：" menu
@@ -3787,7 +3759,7 @@ elif [[ $choose == "3" && -n $v4 ]]; then
 rrpip="ipv4_only" && chip && v4_6="仅IPV4($v4)"
 elif [[ $choose == "4" && -n $v6 ]]; then
 rrpip="ipv6_only" && chip && v4_6="仅IPV6($v6)"
-else 
+else
 red "当前不存在你选择的IPV4/IPV6地址，或者输入错误" && changeip
 fi
 blue "当前已更换的IP优先级：${v4_6}" && sb
@@ -3937,7 +3909,7 @@ elif [ "$menu" = "7" ];then
 gitlabsub
 elif [ "$menu" = "8" ];then
 vmesscfadd
-else 
+else
 sb
 fi
 }
@@ -4116,8 +4088,8 @@ echo "$warp_reserved" | grep -P "reserved" | sed "s/ //g" | sed 's/:"/: "/g' | s
 echo "$warp_info" | grep -P "(private_key|public_key|\"v4\": \"172.16.0.2\"|\"v6\": \"2)" | sed "s/ //g" | sed 's/:"/: "/g' | sed 's/^"/    "/g'
 echo "}"
 }
-warp_info=$(reg) 
-warp_reserved=$(reserved) 
+warp_info=$(reg)
+warp_reserved=$(reserved)
 result
 }
 output=$(warpcode)
@@ -4210,7 +4182,7 @@ sed -i "119s#$wgpo#$nwgpo#g" /etc/s-box/sb11.json
 rm -rf /etc/s-box/sb.json
 cp /etc/s-box/sb${num}.json /etc/s-box/sb.json
 restartsb
-rm -rf /root/result.csv /root/endip.sh 
+rm -rf /root/result.csv /root/endip.sh
 echo
 green "优选完毕，当前使用的对端IP：$nwgip:$nwgpo"
 else
@@ -4219,7 +4191,7 @@ fi
 }
 
 sbymfl(){
-sbport=$(cat /etc/s-box/sbwpph.log 2>/dev/null | awk '{print $3}' | awk -F":" '{print $NF}') 
+sbport=$(cat /etc/s-box/sbwpph.log 2>/dev/null | awk '{print $3}' | awk -F":" '{print $NF}')
 sbport=${sbport:-'40000'}
 resv1=$(curl -s --socks5 localhost:$sbport icanhazip.com)
 resv2=$(curl -sx socks5h://localhost:$sbport icanhazip.com)
@@ -4232,13 +4204,13 @@ warp_s6_ip='Socks5-IPV6自测'
 fi
 v4v6
 if [[ -z $v4 ]]; then
-vps_ipv4='无本地IPV4，黑名单模式'      
+vps_ipv4='无本地IPV4，黑名单模式'
 vps_ipv6="当前IP：$v6"
 elif [[ -n $v4 &&  -n $v6 ]]; then
-vps_ipv4="当前IP：$v4"    
+vps_ipv4="当前IP：$v4"
 vps_ipv6="当前IP：$v6"
 else
-vps_ipv4="当前IP：$v4"    
+vps_ipv4="当前IP：$v4"
 vps_ipv6='无本地IPV6，黑名单模式'
 fi
 unset swg4 swd4 swd6 swg6 ssd4 ssg4 ssd6 ssg6 sad4 sag4 sad6 sag6
@@ -4301,7 +4273,7 @@ fi
 ad4=$(sed 's://.*::g' /etc/s-box/sb.json | jq -r '.route.rules[5].domain_suffix | join(" ")')
 ag4=$(sed 's://.*::g' /etc/s-box/sb.json | jq -r '.route.rules[5].geosite | join(" ")' 2>/dev/null)
 if [[ "$ad4" == "yg_kkk" && ("$ag4" == "yg_kkk" || -z "$ag4") ]]; then
-adfl4="${yellow}【$vps_ipv4】未分流${plain}" 
+adfl4="${yellow}【$vps_ipv4】未分流${plain}"
 else
 if [[ "$ad4" != "yg_kkk" ]]; then
 sad4="$ad4 "
@@ -4315,7 +4287,7 @@ fi
 ad6=$(sed 's://.*::g' /etc/s-box/sb.json | jq -r '.route.rules[6].domain_suffix | join(" ")')
 ag6=$(sed 's://.*::g' /etc/s-box/sb.json | jq -r '.route.rules[6].geosite | join(" ")' 2>/dev/null)
 if [[ "$ad6" == "yg_kkk" && ("$ag6" == "yg_kkk" || -z "$ag6") ]]; then
-adfl6="${yellow}【$vps_ipv6】未分流${plain}" 
+adfl6="${yellow}【$vps_ipv6】未分流${plain}"
 else
 if [[ "$ad6" != "yg_kkk" ]]; then
 sad6="$ad6 "
@@ -4624,7 +4596,7 @@ rm /tmp/crontab.tmp
 
 lnsb(){
 rm -rf /usr/bin/sb
-curl -L -o /usr/bin/sb -# --retry 2 --insecure https://raw.githubusercontent.com/yonggekkk/sing-box-yg/main/sb.sh
+curl -L -o /usr/bin/sb -# --retry 2 --insecure https://raw.githubusercontent.com/GamblerIX/singbox/main/sb.sh
 chmod +x /usr/bin/sb
 }
 
@@ -4633,7 +4605,7 @@ if [[ ! -f '/usr/bin/sb' ]]; then
 red "未正常安装Sing-box-yg" && exit
 fi
 lnsb
-curl -sL https://raw.githubusercontent.com/yonggekkk/sing-box-yg/main/version | awk -F "更新内容" '{print $1}' | head -n 1 > /etc/s-box/v
+curl -sL https://raw.githubusercontent.com/GamblerIX/singbox/main/version | awk -F "更新内容" '{print $1}' | head -n 1 > /etc/s-box/v
 green "Sing-box-yg安装脚本升级成功" && sleep 5 && sb
 }
 
@@ -4712,7 +4684,7 @@ iptables -t nat -F PREROUTING >/dev/null 2>&1
 netfilter-persistent save >/dev/null 2>&1
 service iptables save >/dev/null 2>&1
 green "Sing-box卸载完成！"
-blue "欢迎继续使用Sing-box-yg脚本：bash <(curl -Ls https://raw.githubusercontent.com/yonggekkk/sing-box-yg/main/sb.sh)"
+blue "欢迎继续使用Sing-box-yg脚本：bash <(curl -Ls https://raw.githubusercontent.com/GamblerIX/singbox/main/sb.sh)"
 echo
 }
 
@@ -4721,7 +4693,7 @@ red "退出日志 Ctrl+c"
 if [[ x"${release}" == x"alpine" ]]; then
 yellow "暂不支持alpine查看日志"
 else
-#systemctl status sing-box
+
 journalctl -u sing-box.service -o cat -f
 fi
 }
@@ -4826,16 +4798,16 @@ fi
 }
 
 acme(){
-#bash <(curl -Ls https://gitlab.com/rwkgyg/acme-script/raw/main/acme.sh)
+
 bash <(curl -Ls https://raw.githubusercontent.com/yonggekkk/acme-yg/main/acme.sh)
 }
 cfwarp(){
-#bash <(curl -Ls https://gitlab.com/rwkgyg/CFwarp/raw/main/CFwarp.sh)
+
 bash <(curl -Ls https://raw.githubusercontent.com/yonggekkk/warp-yg/main/CFwarp.sh)
 }
 bbr(){
 if [[ $vi =~ lxc|openvz ]]; then
-yellow "当前VPS的架构为 $vi，不支持开启原版BBR加速" && sleep 2 && exit 
+yellow "当前VPS的架构为 $vi，不支持开启原版BBR加速" && sleep 2 && exit
 else
 green "点击任意键，即可开启BBR加速，ctrl+c退出"
 bash <(curl -Ls https://raw.githubusercontent.com/teddysun/across/master/bbr.sh)
@@ -4951,7 +4923,7 @@ case $(uname -m) in
 aarch64) cpu=arm64;;
 x86_64) cpu=amd64;;
 esac
-curl -L -o /etc/s-box/sbwpph -# --retry 2 --insecure https://raw.githubusercontent.com/yonggekkk/sing-box-yg/main/sbwpph_$cpu
+curl -L -o /etc/s-box/sbwpph -# --retry 2 --insecure https://raw.githubusercontent.com/GamblerIX/singbox/main/sbwpph_$cpu
 chmod +x /etc/s-box/sbwpph
 fi
 if [[ -n $(ps -e | grep sbwpph) ]]; then
@@ -4968,7 +4940,7 @@ echo
 readp "设置WARP-plus-Socks5端口（回车跳过端口默认40000）：" port
 if [[ -z $port ]]; then
 port=40000
-until [[ -z $(ss -tunlp | grep -w udp | awk '{print $5}' | sed 's/.*://g' | grep -w "$port") && -z $(ss -tunlp | grep -w tcp | awk '{print $5}' | sed 's/.*://g' | grep -w "$port") ]] 
+until [[ -z $(ss -tunlp | grep -w udp | awk '{print $5}' | sed 's/.*://g' | grep -w "$port") && -z $(ss -tunlp | grep -w tcp | awk '{print $5}' | sed 's/.*://g' | grep -w "$port") ]]
 do
 [[ -n $(ss -tunlp | grep -w udp | awk '{print $5}' | sed 's/.*://g' | grep -w "$port") || -n $(ss -tunlp | grep -w tcp | awk '{print $5}' | sed 's/.*://g' | grep -w "$port") ]] && yellow "\n端口被占用，请重新输入端口" && readp "自定义端口:" port
 done
@@ -5084,7 +5056,7 @@ blue "sing-box-yg脚本视频教程：https://www.youtube.com/playlist?list=PLMg
 echo
 blue "sing-box-yg脚本博客说明：http://ygkkk.blogspot.com/2023/10/sing-box-yg.html"
 echo
-blue "sing-box-yg脚本项目地址：https://github.com/yonggekkk/sing-box-yg"
+blue "singbox项目地址：https://github.com/GamblerIX/singbox"
 echo
 blue "推荐甬哥新品：ArgoSB一键无交互小钢炮脚本"
 blue "支持：AnyTLS、Any-reality、Vless-xhttp-reality、Vless-reality-vision、Shadowsocks-2022、Hysteria2、Tuic、Vmess-ws、Argo临时/固定隧道"
@@ -5093,28 +5065,28 @@ echo
 }
 
 clear
-white "~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~" 
+white "~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~"
 echo -e "${bblue} ░██     ░██      ░██ ██ ██         ░█${plain}█   ░██     ░██   ░██     ░█${red}█   ░██${plain}  "
 echo -e "${bblue}  ░██   ░██      ░██    ░░██${plain}        ░██  ░██      ░██  ░██${red}      ░██  ░██${plain}   "
 echo -e "${bblue}   ░██ ░██      ░██ ${plain}                ░██ ██        ░██ █${red}█        ░██ ██  ${plain}   "
 echo -e "${bblue}     ░██        ░${plain}██    ░██ ██       ░██ ██        ░█${red}█ ██        ░██ ██  ${plain}  "
 echo -e "${bblue}     ░██ ${plain}        ░██    ░░██        ░██ ░██       ░${red}██ ░██       ░██ ░██ ${plain}  "
 echo -e "${bblue}     ░█${plain}█          ░██ ██ ██         ░██  ░░${red}██     ░██  ░░██     ░██  ░░██ ${plain}  "
-white "~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~" 
-white "甬哥Github项目  ：github.com/yonggekkk"
+white "~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~"
+white "甬哥Github项目  ：github.com/GamblerIX"
 white "甬哥Blogger博客 ：ygkkk.blogspot.com"
 white "甬哥YouTube频道 ：www.youtube.com/@ygkkk"
-white "~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~" 
+white "~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~"
 white "Vless-reality-vision、Vmess-ws(tls)+Argo、Hysteria-2、Tuic-v5 四协议共存脚本"
 white "脚本快捷方式：sb"
 red "~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~"
-green " 1. 一键安装 Sing-box" 
+green " 1. 一键安装 Sing-box"
 green " 2. 删除卸载 Sing-box"
 white "----------------------------------------------------------------------------------"
-green " 3. 变更配置 【双证书TLS/UUID路径/Argo/IP优先/TG通知/Warp/订阅/CDN优选】" 
-green " 4. 更改主端口/添加多端口跳跃复用" 
+green " 3. 变更配置 【双证书TLS/UUID路径/Argo/IP优先/TG通知/Warp/订阅/CDN优选】"
+green " 4. 更改主端口/添加多端口跳跃复用"
 green " 5. 三通道域名分流"
-green " 6. 关闭/重启 Sing-box"   
+green " 6. 关闭/重启 Sing-box"
 green " 7. 更新 Sing-box-yg 脚本"
 green " 8. 更新/切换/指定 Sing-box 内核版本"
 white "----------------------------------------------------------------------------------"
@@ -5131,14 +5103,14 @@ white "-------------------------------------------------------------------------
 green " 0. 退出脚本"
 red "~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~"
 insV=$(cat /etc/s-box/v 2>/dev/null)
-latestV=$(curl -sL https://raw.githubusercontent.com/yonggekkk/sing-box-yg/main/version | awk -F "更新内容" '{print $1}' | head -n 1)
+latestV=$(curl -sL https://raw.githubusercontent.com/GamblerIX/singbox/main/version | awk -F "更新内容" '{print $1}' | head -n 1)
 if [ -f /etc/s-box/v ]; then
 if [ "$insV" = "$latestV" ]; then
 echo -e "当前 Sing-box-yg 脚本最新版：${bblue}${insV}${plain} (已安装)"
 else
 echo -e "当前 Sing-box-yg 脚本版本号：${bblue}${insV}${plain}"
 echo -e "检测到最新 Sing-box-yg 脚本版本号：${yellow}${latestV}${plain} (可选择7进行更新)"
-echo -e "${yellow}$(curl -sL https://raw.githubusercontent.com/yonggekkk/sing-box-yg/main/version)${plain}"
+echo -e "${yellow}$(curl -sL https://raw.githubusercontent.com/GamblerIX/singbox/main/version)${plain}"
 fi
 else
 echo -e "当前 Sing-box-yg 脚本版本号：${bblue}${latestV}${plain}"
@@ -5202,13 +5174,13 @@ elif [[ $rpip = 'ipv6_only' ]]; then
 v4_6="仅IPV6出站($showv6)"
 fi
 if [[ -z $v4 ]]; then
-vps_ipv4='无IPV4'      
+vps_ipv4='无IPV4'
 vps_ipv6="$v6"
 elif [[ -n $v4 &&  -n $v6 ]]; then
-vps_ipv4="$v4"    
+vps_ipv4="$v4"
 vps_ipv6="$v6"
 else
-vps_ipv4="$v4"    
+vps_ipv4="$v4"
 vps_ipv6='无IPV6'
 fi
 echo -e "本地IPV4地址：$blue$vps_ipv4$w4$plain   本地IPV6地址：$blue$vps_ipv6$w6$plain"
@@ -5236,14 +5208,14 @@ fi
 red "~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~"
 echo
 readp "请输入数字【0-16】:" Input
-case "$Input" in  
+case "$Input" in
  1 ) instsllsingbox;;
  2 ) unins;;
  3 ) changeserv;;
  4 ) changeport;;
  5 ) changefl;;
  6 ) stclre;;
- 7 ) upsbyg;; 
+ 7 ) upsbyg;;
  8 ) upsbcroe;;
  9 ) clash_sb_share;;
 10 ) sblog;;
@@ -5253,5 +5225,5 @@ case "$Input" in
 14 ) inssbwpph;;
 15 ) wgcfgo && sbshare;;
 16 ) sbsm;;
- * ) exit 
+ * ) exit
 esac

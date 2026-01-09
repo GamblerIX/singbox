@@ -23,7 +23,7 @@ app.get("/re", (req, res) => {
         sbb="\$(cat sb.txt 2>/dev/null)"
         nohup ./"\$sbb" run -c config.json >/dev/null 2>&1 &
         sleep 2
-        (cd ~ && bash serv00keep.sh >/dev/null 2>&1) &  
+        (cd ~ && bash serv00keep.sh >/dev/null 2>&1) &
         echo '主程序重启成功，请检测三个主节点是否可用，如不可用，可再次刷新重启网页或者重置端口'
     `;
     exec(additionalCommands, (err, stdout, stderr) => {
@@ -34,9 +34,9 @@ app.get("/re", (req, res) => {
         }
         res.type('text').send(stdout);
     });
-}); 
+});
 
-const changeportCommands = "cd ~ && bash webport.sh"; 
+const changeportCommands = "cd ~ && bash webport.sh";
 function runportCommand() {
 exec(changeportCommands, { maxBuffer: 1024 * 1024 * 10 }, (err, stdout, stderr) => {
         console.log('stdout:', stdout);
@@ -53,7 +53,7 @@ exec(changeportCommands, { maxBuffer: 1024 * 1024 * 10 }, (err, stdout, stderr) 
     });
 }
 app.get("/rp", (req, res) => {
-   runportCommand();  
+   runportCommand();
    res.type("html").send("<pre>重置三个节点端口完成！请立即关闭本网页并稍等20秒，将主页后缀改为  /list/你的uuid  可查看更新端口后的节点及订阅信息</pre>");
 });
 app.get("/list/key", (req, res) => {
