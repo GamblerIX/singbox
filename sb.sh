@@ -181,21 +181,64 @@ setup_ports_and_id() {
         port_hy=25533
         port_tu=25534
     else
-        # 随机分配端口
-        port_vl=""; choose_port port_vl
-        port_hy=""; choose_port port_hy
-        port_tu=""; choose_port port_tu
+        echo
+        yellow "--- 协议端口配置 (直接回车将使用推荐/随机端口) ---"
         
-        # Vmess 端口特殊处理 (TLS默认8443, 非TLS默认8080)
-        if [[ "$tls_ready" = "true" ]]; then
-            port_vm=8443
+        # 1. Vless
+        readp "Vless-Reality 端口 [默认随机]: " p_vl
+        if [[ -n "$p_vl" ]]; then
+            port_vl=$p_vl
+            while ss -tunlp | grep -qw "$port_vl"; do
+                red "端口 $port_vl 已被占用，请重新输入"
+                readp "Vless-Reality 端口: " port_vl
+            done
         else
-            port_vm=8080
+            port_vl=""; choose_port port_vl
         fi
+
+        # 2. Vmess
+        local vm_def
+        [[ "$tls_ready" = "true" ]] && vm_def=8443 || vm_def=8080
+        readp "Vmess-WS 端口 [默认 $vm_def]: " p_vm
+        if [[ -n "$p_vm" ]]; then
+            port_vm=$p_vm
+            while ss -tunlp | grep -qw "$port_vm"; do
+                red "端口 $port_vm 已被占用，请重新输入"
+                readp "Vmess-WS 端口: " port_vm
+            done
+        else
+            port_vm=$vm_def
+        fi
+
+        # 3. Hysteria2
+        readp "Hysteria2 端口 [默认随机]: " p_hy
+        if [[ -n "$p_hy" ]]; then
+            port_hy=$p_hy
+            while ss -tunlp | grep -qw "$port_hy"; do
+                red "端口 $p_hy 已被占用，请重新输入"
+                readp "Hysteria2 端口: " port_hy
+            done
+        else
+            port_hy=""; choose_port port_hy
+        fi
+
+        # 4. Tuic5
+        readp "Tuic5 端口 [默认随机]: " p_tu
+        if [[ -n "$p_tu" ]]; then
+            port_tu=$p_tu
+            while ss -tunlp | grep -qw "$port_tu"; do
+                red "端口 $p_tu 已被占用，请重新输入"
+                readp "Tuic5 端口: " port_tu
+            done
+        else
+            port_tu=""; choose_port port_tu
+        fi
+        echo
     fi
     
     uuid=$("$SB_BIN_PATH" generate uuid)
-    blue "配置信息 -> VL:$port_vl | VM:$port_vm | HY:$port_hy | TU:$port_tu | UUID:$uuid"
+    green "配置完成 -> VL:$port_vl | VM:$port_vm | HY:$port_hy | TU:$port_tu"
+    blue "生成的账户 UUID: $uuid"
 }
 
 # 生成配置文件 sb.json
