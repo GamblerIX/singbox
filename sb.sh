@@ -25,7 +25,6 @@ plain='\033[0m'
 SB_CONF_DIR="/etc/s-box"
 SB_BIN_PATH="/etc/s-box/sing-box"
 SB_JSON_PATH="/etc/s-box/sb.json"
-ACME_CERT_DIR="/root/ygkkkca"
 
 # 快捷函数：彩色打印
 red() { echo -e "\033[31;1m$1\033[0m"; }
@@ -131,49 +130,6 @@ choose_port() {
     fi
 }
 
-# 静默申请 IP 证书 (Let's Encrypt)
-silent_acme_ip() {
-    get_ip
-    if [[ -z $v4 && -z $v6 ]]; then
-        red "无法获取IP地址"
-        return 1
-    fi
-    
-    # 确定主IP和ACME标志
-    if [[ -n $v4 ]]; then
-        ipaddr=$v4
-        ipflag=""
-    else
-        ipaddr=$v6
-        ipflag="--listen-v6"
-    fi
-    
-    # 释放80端口防止冲突
-    if [[ -n $(lsof -i :80 | grep -v "PID") ]]; then
-        lsof -i :80 | grep -v "PID" | awk '{print "kill -9",$2}' | sh >/dev/null 2>&1
-    fi
-    
-    # 安装 acme.sh
-    mkdir -p "$ACME_CERT_DIR"
-    if [[ -z $(~/.acme.sh/acme.sh -v 2>/dev/null) ]]; then
-        local auto=$(date +%s%N | md5sum | cut -c 1-6)
-        curl -sL https://get.acme.sh | sh -s email=${auto}@gmail.com >/dev/null 2>&1
-        bash ~/.acme.sh/acme.sh --upgrade --use-wget --auto-upgrade >/dev/null 2>&1
-    fi
-    
-    # 申请 IP 证书 (使用 shortlived 模式，无须域名)
-    yellow "正在为 IP 申请证书: $ipaddr"
-    bash ~/.acme.sh/acme.sh --issue --standalone -d "${ipaddr}" -k ec-256 --server letsencrypt $ipflag --insecure --preferred-chain "ISRG Root X1" --profile shortlived >/dev/null 2>&1
-    bash ~/.acme.sh/acme.sh --install-cert -d "${ipaddr}" --key-file "$ACME_CERT_DIR/private.key" --fullchain-file "$ACME_CERT_DIR/cert.crt" --ecc >/dev/null 2>&1
-    
-    # 记录证书域名/IP
-    echo "$ipaddr" > "$ACME_CERT_DIR/ca.log"
-    
-    # 设置证书自动续期任务
-    crontab -l 2>/dev/null | grep -v '\-\-cron' > /tmp/crontab.tmp
-    echo "0 0 * * * root bash ~/.acme.sh/acme.sh --cron -f >/dev/null 2>&1" >> /tmp/crontab.tmp
-    crontab /tmp/crontab.tmp && rm -f /tmp/crontab.tmp
-}
 
 # ========================================================
 # 4. Sing-box 安装与配置
@@ -205,46 +161,16 @@ install_sb_core() {
     blue "内核已安装，版本：$("$SB_BIN_PATH" version | awk '/version/{print $NF}')"
 }
 
-# 证书配置逻辑
+# 证书配置逻辑 (始终使用自签证书)
 setup_certificates() {
-    # 默认生成一套自签证书作为兜底
+    yellow "正在生成自签证书..."
     openssl ecparam -genkey -name prime256v1 -out "$SB_CONF_DIR/private.key"
     openssl req -new -x509 -days 36500 -key "$SB_CONF_DIR/private.key" -out "$SB_CONF_DIR/cert.pem" -subj "/CN=www.bing.com"
     
-    if [[ "$SILENT" = true ]]; then
-        yellow "静默模式：尝试自动申请 IP 证书..."
-        silent_acme_ip
-        if [[ -f "$ACME_CERT_DIR/cert.crt" && -s "$ACME_CERT_DIR/cert.crt" ]]; then
-            tls_ready=true
-            cert_file="$ACME_CERT_DIR/cert.crt"
-            key_file="$ACME_CERT_DIR/private.key"
-            green "IP 证书申请成功"
-        else
-            yellow "IP 证书申请失败，切换至自签证书"
-            tls_ready=false
-            cert_file="$SB_CONF_DIR/cert.pem"
-            key_file="$SB_CONF_DIR/private.key"
-        fi
-        return
-    fi
-    
-    # 交互模式
-    if [[ -f "$ACME_CERT_DIR/cert.crt" && -s "$ACME_CERT_DIR/cert.crt" ]]; then
-        yellow "检测到已申请的证书："
-        echo "1. 使用自签证书 (默认)"
-        echo "2. 使用已申请的 ACME 证书"
-        readp "请选择 [1/2]: " cert_choice
-        if [[ "$cert_choice" = "2" ]]; then
-            tls_ready=true
-            cert_file="$ACME_CERT_DIR/cert.crt"
-            key_file="$ACME_CERT_DIR/private.key"
-            return
-        fi
-    fi
-    
-    tls_ready=false
+    tls_ready=true
     cert_file="$SB_CONF_DIR/cert.pem"
     key_file="$SB_CONF_DIR/private.key"
+    green "自签证书生成成功"
 }
 
 # 端口与UUID配置
@@ -520,17 +446,9 @@ show_nodes() {
     local s_id=$(echo "$cfg" | jq -r '.inbounds[0].tls.reality.short_id[0]')
     local cert_path=$(echo "$cfg" | jq -r '.inbounds[2].tls.key_path')
     
-    # 确定 SNI 和跳过证书验证标志
-    local sni_val
-    local allow_insecure
-    
-    if [[ "$cert_path" = "$SB_CONF_DIR/private.key" ]]; then
-        sni_val="www.bing.com"
-        allow_insecure=1
-    else
-        sni_val=$(cat "$ACME_CERT_DIR/ca.log" 2>/dev/null)
-        allow_insecure=0
-    fi
+    # 确定 SNI 和跳过证书验证标志 (始终自签)
+    local sni_val="www.bing.com"
+    local allow_insecure=1
     
     local vmess_security=""
     [[ "$vm_tls" = "true" ]] && vmess_security="tls"
@@ -629,13 +547,13 @@ main_menu() {
     while true; do
         clear
         white "══════════════════════════════════════════════════"
-        white "         Sing-box 管理脚本 | 快捷方式: sb"
+        white "         Singbox 管理脚本 | 快捷方式: sb"
         white "══════════════════════════════════════════════════"
-        echo -e "${green} 1. 安装服务 (New)    2. 卸载服务${plain}"
-        echo -e "${green} 3. 重启/停止服务     4. 更新管理脚本${plain}"
-        echo -e "${green} 5. 更新内核版本      6. 查看节点链接${plain}"
-        echo -e "${green} 7. 查看实时日志      8. BBR 加速优化${plain}"
-        echo -e "${green} 9. Acme 证书工具     0. 退出脚本${plain}"
+        echo -e "${green} 1. 安装Singbox服务         2. 卸载Singbox服务${plain}"
+        echo -e "${green} 3. 重启/停止Singbox服务    4. 更新Singbox管理脚本${plain}"
+        echo -e "${green} 5. 更新Singbox内核版本     6. 查看Singbox节点链接${plain}"
+        echo -e "${green} 7. 查看实时日志            8. BBR 加速优化${plain}"
+        echo -e "${green} 0. 退出脚本${plain}"
         white "══════════════════════════════════════════════════"
         
         detect_system
@@ -667,7 +585,6 @@ main_menu() {
             6) show_nodes; echo; read -n 1 -s -r -p "按任意键返回..." ;;
             7) red "按 Ctrl+C 退出日志查看"; journalctl -u sing-box -o cat -f ;;
             8) bash <(curl -sL https://raw.githubusercontent.com/GamblerIX/singbox/main/bbr.sh) ;;
-            9) bash <(curl -sL https://raw.githubusercontent.com/GamblerIX/singbox/main/acme.sh) ;;
             0) exit 0 ;;
             *) exit 0 ;;
         esac
