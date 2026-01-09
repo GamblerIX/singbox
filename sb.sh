@@ -1,8 +1,43 @@
 #!/bin/bash
+# 相关文件: README.md, acme.sh, bbr.sh, sb.sh
+# 
+# Sing-box 一键安装脚本
+# 功能：支持 Vless-reality, Vmess-ws, Hysteria2, Tuic5
+# 
 export LANG=en_US.UTF-8
+
+# ========================================================
+# 1. 变量定义与配置管理
+# ========================================================
 
 # 静默模式标志
 SILENT=false
+
+# 颜色定义
+red='\033[31m'
+green='\033[32m'
+yellow='\033[33m'
+blue='\033[36m'
+bblue='\033[34m'
+plain='\033[0m'
+
+# 核心路径
+SB_CONF_DIR="/etc/s-box"
+SB_BIN_PATH="/etc/s-box/sing-box"
+SB_JSON_PATH="/etc/s-box/sb.json"
+ACME_CERT_DIR="/root/ygkkkca"
+
+# 快捷函数：彩色打印
+red() { echo -e "\033[31;1m$1\033[0m"; }
+green() { echo -e "\033[32;1m$1\033[0m"; }
+yellow() { echo -e "\033[33;1m$1\033[0m"; }
+blue() { echo -e "\033[36;1m$1\033[0m"; }
+white() { echo -e "\033[37;1m$1\033[0m"; }
+readp() { read -p "$(yellow "$1")" $2; }
+
+# ========================================================
+# 2. 基础检测与依赖安装
+# ========================================================
 
 # 解析命令行参数
 while [[ $# -gt 0 ]]; do
@@ -12,265 +47,605 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
-# 颜色
-red='\033[31m';green='\033[32m';yellow='\033[33m';blue='\033[36m';bblue='\033[34m';plain='\033[0m'
-red(){ echo -e "\033[31;1m$1\033[0m";}
-green(){ echo -e "\033[32;1m$1\033[0m";}
-yellow(){ echo -e "\033[33;1m$1\033[0m";}
-blue(){ echo -e "\033[36;1m$1\033[0m";}
-white(){ echo -e "\033[37;1m$1\033[0m";}
-readp(){ read -p "$(yellow "$1")" $2;}
-
-[[ $EUID -ne 0 ]] && yellow "请以root模式运行脚本" && exit
+# 权限检测
+if [[ $EUID -ne 0 ]]; then
+    yellow "请以root模式运行脚本"
+    exit 1
+fi
 
 # 系统检测
-release=$(grep -qi 'debian' /etc/issue /etc/os-release 2>/dev/null && echo Debian || \
-          grep -qi 'ubuntu' /etc/issue /etc/os-release 2>/dev/null && echo Ubuntu || \
-          grep -qi 'centos\|redhat' /etc/redhat-release /etc/os-release 2>/dev/null && echo Centos)
-[[ -z $release ]] && red "不支持当前系统" && exit
-
-op=$(cat /etc/redhat-release 2>/dev/null || grep -i pretty_name /etc/os-release | cut -d\" -f2)
-vi=$(systemd-detect-virt 2>/dev/null)
-hostname=$(hostname)
-case $(uname -m) in aarch64) cpu=arm64;; x86_64) cpu=amd64;; *) red "不支持$(uname -m)架构" && exit;; esac
-bbr=$(sysctl net.ipv4.tcp_congestion_control 2>/dev/null | awk '{print $3}'); [[ -z $bbr ]] && bbr="未启用"
-
-# 首次安装依赖
-[[ ! -f sbyg_update ]] && {
-    green "安装依赖……"
-    command -v apt-get &>/dev/null && apt update -y && apt install -y jq curl openssl tar wget qrencode socat cron
-    command -v yum &>/dev/null && yum install -y epel-release jq curl openssl tar wget qrencode socat
-    touch sbyg_update
-}
-
-v4v6(){ v4=$(curl -s4m5 icanhazip.com -k); v6=$(curl -s6m5 icanhazip.com -k); }
-
-v6(){
-    [[ -z $(curl -s4m5 icanhazip.com -k) ]] && { echo "nameserver 2a00:1098:2b::1" > /etc/resolv.conf; ipv=prefer_ipv6; } || ipv=prefer_ipv4
-}
-
-chooseport(){
-    [[ -z $port ]] && port=$(shuf -i 10000-65535 -n 1)
-    while ss -tunlp | grep -qw "$port"; do port=$(shuf -i 10000-65535 -n 1); done
-}
-
-# 静默模式 IP 证书申请函数
-silentAcmeIP(){
-    v4v6
-    [[ -z $v4 && -z $v6 ]] && { red "无法获取IP地址"; return 1; }
-    [[ -n $v4 ]] && ipaddr=$v4 && ipflag="" || { ipaddr=$v6; ipflag="--listen-v6"; }
+detect_system() {
+    release=$(grep -qi 'debian' /etc/issue /etc/os-release 2>/dev/null && echo Debian || \
+              grep -qi 'ubuntu' /etc/issue /etc/os-release 2>/dev/null && echo Ubuntu || \
+              grep -qi 'centos\|redhat' /etc/redhat-release /etc/os-release 2>/dev/null && echo Centos)
     
-    # 释放80端口
+    if [[ -z $release ]]; then
+        red "不支持当前系统"
+        exit 1
+    fi
+
+    # 详细系统信息
+    op=$(cat /etc/redhat-release 2>/dev/null || grep -i pretty_name /etc/os-release | cut -d\" -f2)
+    vi=$(systemd-detect-virt 2>/dev/null)
+    hostname=$(hostname)
+    
+    # CPU架构检测
+    case $(uname -m) in
+        aarch64) cpu=arm64;;
+        x86_64) cpu=amd64;;
+        *) red "不支持$(uname -m)架构"; exit 1;;
+    esac
+    
+    # BBR检测
+    bbr_status=$(sysctl net.ipv4.tcp_congestion_control 2>/dev/null | awk '{print $3}')
+    [[ -z $bbr_status ]] && bbr_status="未启用"
+}
+
+# 安装基础依赖
+install_dependencies() {
+    if [[ ! -f sbyg_update ]]; then
+        green "正在安装系统依赖……"
+        if command -v apt-get &>/dev/null; then
+            apt update -y
+            apt install -y jq curl openssl tar wget qrencode socat cron
+        elif command -v yum &>/dev/null; then
+            yum install -y epel-release jq curl openssl tar wget qrencode socat
+        fi
+        touch sbyg_update
+    fi
+}
+
+# ========================================================
+# 3. 网络与证书功能
+# ========================================================
+
+# 获取公网IP
+get_ip() {
+    v4=$(curl -s4m5 icanhazip.com -k)
+    v6=$(curl -s6m5 icanhazip.com -k)
+}
+
+# 检测IPv6优先
+check_ipv6() {
+    if [[ -z $(curl -s4m5 icanhazip.com -k) ]]; then
+        # 纯IPv6环境，设置DNS
+        echo "nameserver 2a00:1098:2b::1" > /etc/resolv.conf
+        ipv_strategy="prefer_ipv6"
+    else
+        ipv_strategy="prefer_ipv4"
+    fi
+}
+
+# 端口占用检测与随机生成
+choose_port() {
+    local target_var=$1
+    local temp_port
+    
+    if [[ -z ${!target_var} ]]; then
+        temp_port=$(shuf -i 10000-65535 -n 1)
+        # 循环直到找到未被占用的端口
+        while ss -tunlp | grep -qw "$temp_port"; do
+            temp_port=$(shuf -i 10000-65535 -n 1)
+        done
+        eval "$target_var=$temp_port"
+    fi
+}
+
+# 静默申请 IP 证书 (Let's Encrypt)
+silent_acme_ip() {
+    get_ip
+    if [[ -z $v4 && -z $v6 ]]; then
+        red "无法获取IP地址"
+        return 1
+    fi
+    
+    # 确定主IP和ACME标志
+    if [[ -n $v4 ]]; then
+        ipaddr=$v4
+        ipflag=""
+    else
+        ipaddr=$v6
+        ipflag="--listen-v6"
+    fi
+    
+    # 释放80端口防止冲突
     if [[ -n $(lsof -i :80 | grep -v "PID") ]]; then
         lsof -i :80 | grep -v "PID" | awk '{print "kill -9",$2}' | sh >/dev/null 2>&1
     fi
     
     # 安装 acme.sh
-    mkdir -p /root/ygkkkca
+    mkdir -p "$ACME_CERT_DIR"
     if [[ -z $(~/.acme.sh/acme.sh -v 2>/dev/null) ]]; then
-        auto=$(date +%s%N | md5sum | cut -c 1-6)
+        local auto=$(date +%s%N | md5sum | cut -c 1-6)
         curl -sL https://get.acme.sh | sh -s email=${auto}@gmail.com >/dev/null 2>&1
         bash ~/.acme.sh/acme.sh --upgrade --use-wget --auto-upgrade >/dev/null 2>&1
     fi
     
-    # 申请 IP 证书
-    yellow "正在申请 IP 证书: $ipaddr"
-    bash ~/.acme.sh/acme.sh --issue --standalone -d ${ipaddr} -k ec-256 --server letsencrypt $ipflag --insecure --preferred-chain "ISRG Root X1" --profile shortlived >/dev/null 2>&1
-    bash ~/.acme.sh/acme.sh --install-cert -d ${ipaddr} --key-file /root/ygkkkca/private.key --fullchain-file /root/ygkkkca/cert.crt --ecc >/dev/null 2>&1
+    # 申请 IP 证书 (使用 shortlived 模式，无须域名)
+    yellow "正在为 IP 申请证书: $ipaddr"
+    bash ~/.acme.sh/acme.sh --issue --standalone -d "${ipaddr}" -k ec-256 --server letsencrypt $ipflag --insecure --preferred-chain "ISRG Root X1" --profile shortlived >/dev/null 2>&1
+    bash ~/.acme.sh/acme.sh --install-cert -d "${ipaddr}" --key-file "$ACME_CERT_DIR/private.key" --fullchain-file "$ACME_CERT_DIR/cert.crt" --ecc >/dev/null 2>&1
     
-    # 保存证书信息
-    echo $ipaddr > /root/ygkkkca/ca.log
+    # 记录证书域名/IP
+    echo "$ipaddr" > "$ACME_CERT_DIR/ca.log"
     
-    # 设置自动续期
+    # 设置证书自动续期任务
     crontab -l 2>/dev/null | grep -v '\-\-cron' > /tmp/crontab.tmp
     echo "0 0 * * * root bash ~/.acme.sh/acme.sh --cron -f >/dev/null 2>&1" >> /tmp/crontab.tmp
     crontab /tmp/crontab.tmp && rm -f /tmp/crontab.tmp
 }
 
-inssb(){
-    # 获取最新版本
-    sbcore=$(curl -sL https://api.github.com/repos/SagerNet/sing-box/releases/latest | grep '"tag_name"' | sed -E 's/.*"v([^"]+)".*/\1/')
-    [[ -z "$sbcore" ]] && { red "获取最新版本失败"; exit; }
-    yellow "正在安装 Sing-box v$sbcore..."
-    curl -L -o /etc/s-box/sing-box.tar.gz -# --retry 2 https://github.com/SagerNet/sing-box/releases/download/v$sbcore/sing-box-$sbcore-linux-$cpu.tar.gz
-    tar xzf /etc/s-box/sing-box.tar.gz -C /etc/s-box && mv /etc/s-box/sing-box-*/sing-box /etc/s-box && rm -rf /etc/s-box/sing-box-* /etc/s-box/*.tar.gz
-    chmod +x /etc/s-box/sing-box; [[ ! -f /etc/s-box/sing-box ]] && red "内核安装失败" && exit
-    blue "内核：$(/etc/s-box/sing-box version | awk '/version/{print $NF}')"
+# ========================================================
+# 4. Sing-box 安装与配置
+# ========================================================
+
+# 下载并安装内核
+install_sb_core() {
+    # 获取最新内核版本号
+    sb_version=$(curl -sL https://api.github.com/repos/SagerNet/sing-box/releases/latest | grep '"tag_name"' | sed -E 's/.*"v([^"]+)".*/\1/')
+    if [[ -z "$sb_version" ]]; then
+        red "获取最新版本失败"
+        exit 1
+    fi
+    
+    yellow "正在下载 Sing-box v$sb_version ($cpu)..."
+    mkdir -p "$SB_CONF_DIR"
+    curl -L -o "$SB_CONF_DIR/sing-box.tar.gz" -# --retry 2 "https://github.com/SagerNet/sing-box/releases/download/v$sb_version/sing-box-$sb_version-linux-$cpu.tar.gz"
+    
+    # 解压并部署
+    tar xzf "$SB_CONF_DIR/sing-box.tar.gz" -C "$SB_CONF_DIR"
+    mv "$SB_CONF_DIR/sing-box-$sb_version-linux-$cpu/sing-box" "$SB_BIN_PATH"
+    rm -rf "$SB_CONF_DIR/sing-box-$sb_version-linux-$cpu" "$SB_CONF_DIR/sing-box.tar.gz"
+    
+    chmod +x "$SB_BIN_PATH"
+    if [[ ! -f "$SB_BIN_PATH" ]]; then
+        red "内核安装失败"
+        exit 1
+    fi
+    blue "内核已安装，版本：$("$SB_BIN_PATH" version | awk '/version/{print $NF}')"
 }
 
-inscert(){
-    # 生成自签证书作为默认
-    openssl ecparam -genkey -name prime256v1 -out /etc/s-box/private.key
-    openssl req -new -x509 -days 36500 -key /etc/s-box/private.key -out /etc/s-box/cert.pem -subj "/CN=www.bing.com"
+# 证书配置逻辑
+setup_certificates() {
+    # 默认生成一套自签证书作为兜底
+    openssl ecparam -genkey -name prime256v1 -out "$SB_CONF_DIR/private.key"
+    openssl req -new -x509 -days 36500 -key "$SB_CONF_DIR/private.key" -out "$SB_CONF_DIR/cert.pem" -subj "/CN=www.bing.com"
     
-    # 静默模式：自动申请IP证书
     if [[ "$SILENT" = true ]]; then
-        yellow "静默模式：自动申请IP证书..."
-        silentAcmeIP
-        if [[ -f /root/ygkkkca/cert.crt && -s /root/ygkkkca/cert.crt ]]; then
-            tlsyn=true; certc='/root/ygkkkca/cert.crt'; certp='/root/ygkkkca/private.key'
-            green "IP证书申请成功"
+        yellow "静默模式：尝试自动申请 IP 证书..."
+        silent_acme_ip
+        if [[ -f "$ACME_CERT_DIR/cert.crt" && -s "$ACME_CERT_DIR/cert.crt" ]]; then
+            tls_ready=true
+            cert_file="$ACME_CERT_DIR/cert.crt"
+            key_file="$ACME_CERT_DIR/private.key"
+            green "IP 证书申请成功"
         else
-            yellow "IP证书申请失败，使用自签证书"
-            tlsyn=false; certc='/etc/s-box/cert.pem'; certp='/etc/s-box/private.key'
+            yellow "IP 证书申请失败，切换至自签证书"
+            tls_ready=false
+            cert_file="$SB_CONF_DIR/cert.pem"
+            key_file="$SB_CONF_DIR/private.key"
         fi
         return
     fi
     
-    # 交互模式：检测已有证书
-    if [[ -f /root/ygkkkca/cert.crt && -s /root/ygkkkca/cert.crt ]]; then
-        yellow "检测到已申请的证书 1:自签(默认) 2:使用已申请的证书"; readp "选择：" m
-        [[ "$m" = "2" ]] && { tlsyn=true; certc='/root/ygkkkca/cert.crt'; certp='/root/ygkkkca/private.key'; return; }
+    # 交互模式
+    if [[ -f "$ACME_CERT_DIR/cert.crt" && -s "$ACME_CERT_DIR/cert.crt" ]]; then
+        yellow "检测到已申请的证书："
+        echo "1. 使用自签证书 (默认)"
+        echo "2. 使用已申请的 ACME 证书"
+        readp "请选择 [1/2]: " cert_choice
+        if [[ "$cert_choice" = "2" ]]; then
+            tls_ready=true
+            cert_file="$ACME_CERT_DIR/cert.crt"
+            key_file="$ACME_CERT_DIR/private.key"
+            return
+        fi
     fi
-    tlsyn=false; certc='/etc/s-box/cert.pem'; certp='/etc/s-box/private.key'
+    
+    tls_ready=false
+    cert_file="$SB_CONF_DIR/cert.pem"
+    key_file="$SB_CONF_DIR/private.key"
 }
 
-insport(){
-    # 静默模式：使用固定端口25531-25534
+# 端口与UUID配置
+setup_ports_and_id() {
     if [[ "$SILENT" = true ]]; then
-        port_vl=25531; port_vm=25532; port_hy=25533; port_tu=25534
+        port_vl=25531
+        port_vm=25532
+        port_hy=25533
+        port_tu=25534
     else
-        for i in {1..4}; do port=""; chooseport; ports[$i]=$port; done
-        port_vl=${ports[1]}; port_hy=${ports[3]}; port_tu=${ports[4]}
-        [[ $tlsyn == "true" ]] && port_vm=8443 || port_vm=8080
+        # 随机分配端口
+        port_vl=""; choose_port port_vl
+        port_hy=""; choose_port port_hy
+        port_tu=""; choose_port port_tu
+        
+        # Vmess 端口特殊处理 (TLS默认8443, 非TLS默认8080)
+        if [[ "$tls_ready" = "true" ]]; then
+            port_vm=8443
+        else
+            port_vm=8080
+        fi
     fi
-    uuid=$(/etc/s-box/sing-box generate uuid)
-    blue "端口 VL:$port_vl VM:$port_vm HY:$port_hy TU:$port_tu UUID:$uuid"
+    
+    uuid=$("$SB_BIN_PATH" generate uuid)
+    blue "配置信息 -> VL:$port_vl | VM:$port_vm | HY:$port_hy | TU:$port_tu | UUID:$uuid"
 }
 
-insjson(){
-    sbnh=$(/etc/s-box/sing-box version | awk '/version/{print $NF}' | cut -d. -f1,2)
-    [[ "$sbnh" == "1.10" ]] && sniff='"sniff":true,"sniff_override_destination":true,' || sniff=''
-cat > /etc/s-box/sb.json <<EOF
-{"log":{"level":"info","timestamp":true},"inbounds":[
-{"type":"vless",${sniff}"tag":"vless","listen":"::","listen_port":${port_vl},"users":[{"uuid":"${uuid}","flow":"xtls-rprx-vision"}],"tls":{"enabled":true,"server_name":"apple.com","reality":{"enabled":true,"handshake":{"server":"apple.com","server_port":443},"private_key":"$private_key","short_id":["$short_id"]}}},
-{"type":"vmess",${sniff}"tag":"vmess","listen":"::","listen_port":${port_vm},"users":[{"uuid":"${uuid}","alterId":0}],"transport":{"type":"ws","path":"${uuid}-vm","max_early_data":2048,"early_data_header_name":"Sec-WebSocket-Protocol"},"tls":{"enabled":${tlsyn},"server_name":"www.bing.com","certificate_path":"$certc","key_path":"$certp"}},
-{"type":"hysteria2",${sniff}"tag":"hy2","listen":"::","listen_port":${port_hy},"users":[{"password":"${uuid}"}],"tls":{"enabled":true,"alpn":["h3"],"certificate_path":"$certc","key_path":"$certp"}},
-{"type":"tuic",${sniff}"tag":"tuic","listen":"::","listen_port":${port_tu},"users":[{"uuid":"${uuid}","password":"${uuid}"}],"congestion_control":"bbr","tls":{"enabled":true,"alpn":["h3"],"certificate_path":"$certc","key_path":"$certp"}}
-],"outbounds":[{"type":"direct","tag":"direct","domain_strategy":"$ipv"},{"type":"block","tag":"block"}],"route":{"rules":[${sniff:+"{\"action\":\"sniff\"},"}{"protocol":["quic","stun"],"outbound":"block"}]}}
+# 生成配置文件 sb.json
+generate_config() {
+    # 根据版本判断是否开启嗅探
+    local sb_ver_short=$("$SB_BIN_PATH" version | awk '/version/{print $NF}' | cut -d. -f1,2)
+    local sniff_cfg=""
+    if [[ "$sb_ver_short" == "1.10" ]]; then
+        sniff_cfg='"sniff":true,"sniff_override_destination":true,'
+    fi
+    
+    # 构建复杂的 JSON 配置
+    cat > "$SB_JSON_PATH" <<EOF
+{
+  "log": {
+    "level": "info",
+    "timestamp": true
+  },
+  "inbounds": [
+    {
+      "type": "vless",
+      ${sniff_cfg}
+      "tag": "vless",
+      "listen": "::",
+      "listen_port": ${port_vl},
+      "users": [
+        {
+          "uuid": "${uuid}",
+          "flow": "xtls-rprx-vision"
+        }
+      ],
+      "tls": {
+        "enabled": true,
+        "server_name": "apple.com",
+        "reality": {
+          "enabled": true,
+          "handshake": {
+            "server": "apple.com",
+            "server_port": 443
+          },
+          "private_key": "${private_key}",
+          "short_id": [ "${short_id}" ]
+        }
+      }
+    },
+    {
+      "type": "vmess",
+      ${sniff_cfg}
+      "tag": "vmess",
+      "listen": "::",
+      "listen_port": ${port_vm},
+      "users": [
+        {
+          "uuid": "${uuid}",
+          "alterId": 0
+        }
+      ],
+      "transport": {
+        "type": "ws",
+        "path": "${uuid}-vm",
+        "max_early_data": 2048,
+        "early_data_header_name": "Sec-WebSocket-Protocol"
+      },
+      "tls": {
+        "enabled": ${tls_ready},
+        "server_name": "www.bing.com",
+        "certificate_path": "${cert_file}",
+        "key_path": "${key_file}"
+      }
+    },
+    {
+      "type": "hysteria2",
+      ${sniff_cfg}
+      "tag": "hy2",
+      "listen": "::",
+      "listen_port": ${port_hy},
+      "users": [
+        {
+          "password": "${uuid}"
+        }
+      ],
+      "tls": {
+        "enabled": true,
+        "alpn": [ "h3" ],
+        "certificate_path": "${cert_file}",
+        "key_path": "${key_file}"
+      }
+    },
+    {
+      "type": "tuic",
+      ${sniff_cfg}
+      "tag": "tuic",
+      "listen": "::",
+      "listen_port": ${port_tu},
+      "users": [
+        {
+          "uuid": "${uuid}",
+          "password": "${uuid}"
+        }
+      ],
+      "congestion_control": "bbr",
+      "tls": {
+        "enabled": true,
+        "alpn": [ "h3" ],
+        "certificate_path": "${cert_file}",
+        "key_path": "${key_file}"
+      }
+    }
+  ],
+  "outbounds": [
+    {
+      "type": "direct",
+      "tag": "direct",
+      "domain_strategy": "${ipv_strategy}"
+    },
+    {
+      "type": "block",
+      "tag": "block"
+    }
+  ],
+  "route": {
+    "rules": [
+      ${sniff_cfg:+"{ \"action\": \"sniff\" }," }
+      {
+        "protocol": [ "quic", "stun" ],
+        "outbound": "block"
+      }
+    ]
+  }
+}
 EOF
 }
 
-sbservice(){
-cat > /etc/systemd/system/sing-box.service <<EOF
+# 管理服务
+setup_service() {
+    cat > /etc/systemd/system/sing-box.service <<EOF
 [Unit]
-After=network.target
+Description=Sing-box Service
+After=network.target nss-lookup.target
+
 [Service]
-ExecStart=/etc/s-box/sing-box run -c /etc/s-box/sb.json
+User=root
+WorkingDirectory=${SB_CONF_DIR}
+ExecStart=${SB_BIN_PATH} run -c ${SB_JSON_PATH}
 Restart=on-failure
-LimitNOFILE=infinity
+RestartSec=10s
+LimitNOFILE=65535
+
 [Install]
 WantedBy=multi-user.target
 EOF
-systemctl daemon-reload && systemctl enable --now sing-box >/dev/null 2>&1
+    systemctl daemon-reload
+    systemctl enable --now sing-box >/dev/null 2>&1
 }
 
-lnsb(){ curl -sL -o /usr/bin/sb https://raw.githubusercontent.com/GamblerIX/singbox/main/sb.sh && chmod +x /usr/bin/sb; }
-
-# 1.安装
-install(){
-    [[ -f /etc/systemd/system/sing-box.service ]] && red "已安装" && exit
-    mkdir -p /etc/s-box; v6; inssb; inscert; insport
-    key=$(/etc/s-box/sing-box generate reality-keypair)
-    private_key=$(echo "$key" | awk '/PrivateKey/{print $2}')
-    public_key=$(echo "$key" | awk '/PublicKey/{print $2}'); echo "$public_key" > /etc/s-box/public.key
-    short_id=$(/etc/s-box/sing-box generate rand --hex 4)
-    insjson; sbservice; lnsb
-    curl -sL https://raw.githubusercontent.com/GamblerIX/singbox/main/version | head -1 > /etc/s-box/v
-    green "安装成功！快捷方式：sb"; sbshare
+# 部署快捷入口
+setup_shortcut() {
+    curl -sL -o /usr/bin/sb https://raw.githubusercontent.com/GamblerIX/singbox/main/sb.sh
+    chmod +x /usr/bin/sb
 }
 
-# 2.卸载
-unins(){
+# ========================================================
+# 5. 用户操作函数
+# ========================================================
+
+# 安装全流程
+do_install() {
+    if [[ -f /etc/systemd/system/sing-box.service ]]; then
+        red "Sing-box 已安装，请勿重复安装"
+        exit 1
+    fi
+    
+    detect_system
+    install_dependencies
+    check_ipv6
+    install_sb_core
+    setup_certificates
+    setup_ports_and_id
+    
+    # 生成 REALITY 密钥对
+    local key_pair=$("$SB_BIN_PATH" generate reality-keypair)
+    private_key=$(echo "$key_pair" | awk '/PrivateKey/{print $2}')
+    public_key=$(echo "$key_pair" | awk '/PublicKey/{print $2}')
+    echo "$public_key" > "$SB_CONF_DIR/public.key"
+    
+    short_id=$("$SB_BIN_PATH" generate rand --hex 4)
+    
+    generate_config
+    setup_service
+    setup_shortcut
+    
+    # 记录版本号
+    curl -sL https://raw.githubusercontent.com/GamblerIX/singbox/main/version | head -1 > "$SB_CONF_DIR/v"
+    
+    green "Sing-box 安装成功！快捷键：sb"
+    sleep 2
+    show_nodes
+}
+
+# 卸载
+do_uninstall() {
     systemctl disable --now sing-box >/dev/null 2>&1
-    rm -rf /etc/systemd/system/sing-box.service /etc/s-box sbyg_update /usr/bin/sb
-    green "卸载完成"
+    rm -rf /etc/systemd/system/sing-box.service "$SB_CONF_DIR" sbyg_update /usr/bin/sb
+    green "Sing-box 已彻底卸载"
 }
 
-# 3.暂停/重启
-stclre(){
-    [[ ! -f /etc/s-box/sb.json ]] && red "未安装" && exit
-    yellow "1:重启 2:关闭"; readp "选择：" m
-    [[ "$m" = "1" ]] && systemctl restart sing-box && green "已重启" || { systemctl stop sing-box; green "已关闭"; }
+# 重启或停止
+do_restart_stop() {
+    if [[ ! -f "$SB_JSON_PATH" ]]; then
+        red "未检测到安装"
+        exit 1
+    fi
+    yellow "1. 重启服务"
+    yellow "2. 停止服务"
+    readp "请选择: " choice
+    if [[ "$choice" = "1" ]]; then
+        systemctl restart sing-box
+        green "已重启"
+    else
+        systemctl stop sing-box
+        green "已停止"
+    fi
 }
 
-# 4.更新脚本
-upsbyg(){ lnsb; curl -sL https://raw.githubusercontent.com/GamblerIX/singbox/main/version | head -1 > /etc/s-box/v; green "已更新" && sleep 2 && sb; }
-
-# 5.更新内核
-upcore(){
-    [[ ! -f /etc/s-box/sb.json ]] && red "未安装" && exit
-    lat=$(curl -sL https://data.jsdelivr.com/v1/package/gh/SagerNet/sing-box | grep -oE '"[0-9.]+",' | head -1 | tr -d '",')
-    ins=$(/etc/s-box/sing-box version 2>/dev/null | awk '/version/{print $NF}')
-    green "当前:$ins 最新:$lat"; yellow "1:更新 0:返回"; readp "选择：" m; [[ "$m" != "1" ]] && sb && return
-    curl -L -o /etc/s-box/sb.tar.gz -# https://github.com/SagerNet/sing-box/releases/download/v$lat/sing-box-$lat-linux-$cpu.tar.gz
-    tar xzf /etc/s-box/sb.tar.gz -C /etc/s-box && mv /etc/s-box/sing-box-*/sing-box /etc/s-box && rm -rf /etc/s-box/sing-box-* /etc/s-box/*.tar.gz
-    chmod +x /etc/s-box/sing-box && systemctl restart sing-box
-    green "已更新:$(/etc/s-box/sing-box version | awk '/version/{print $NF}')"
+# 更新脚本
+do_update_script() {
+    setup_shortcut
+    curl -sL https://raw.githubusercontent.com/GamblerIX/singbox/main/version | head -1 > "$SB_CONF_DIR/v" 2>/dev/null
+    green "脚本更新成功"
+    sleep 1
+    exec sb
 }
 
-# 6.输出节点
-sbshare(){
-    [[ ! -f /etc/s-box/sb.json ]] && red "未安装" && exit
-    v4v6; ip=${v4:-$v6}; [[ "$ip" =~ : ]] && sip="[$ip]" || sip=$ip
-    cfg=$(sed 's://.*::g' /etc/s-box/sb.json)
-    uuid=$(echo "$cfg" | jq -r '.inbounds[0].users[0].uuid')
-    vl_p=$(echo "$cfg" | jq -r '.inbounds[0].listen_port')
-    vm_p=$(echo "$cfg" | jq -r '.inbounds[1].listen_port')
-    hy_p=$(echo "$cfg" | jq -r '.inbounds[2].listen_port')
-    tu_p=$(echo "$cfg" | jq -r '.inbounds[3].listen_port')
-    ws=$(echo "$cfg" | jq -r '.inbounds[1].transport.path')
-    tls=$(echo "$cfg" | jq -r '.inbounds[1].tls.enabled')
-    pk=$(cat /etc/s-box/public.key)
-    sid=$(echo "$cfg" | jq -r '.inbounds[0].tls.reality.short_id[0]')
-    hkey=$(echo "$cfg" | jq -r '.inbounds[2].tls.key_path')
-    # 自签证书使用bing.com作为SNI，ACME证书使用实际IP/域名
-    [[ "$hkey" = '/etc/s-box/private.key' ]] && sni="www.bing.com" && ins=1 || { sni=$(cat /root/ygkkkca/ca.log 2>/dev/null); [[ "$sni" =~ ^[0-9.]+$ || "$sni" =~ : ]] && ins=0 || ins=0; }
-    [[ "$tls" = "false" ]] && vmtls="" || vmtls="tls"
+# 更新内核
+do_update_core() {
+    if [[ ! -f "$SB_JSON_PATH" ]]; then
+        red "未安装，无法更新内核"
+        return
+    fi
+    local latest_ver=$(curl -sL https://api.github.com/repos/SagerNet/sing-box/releases/latest | grep '"tag_name"' | sed -E 's/.*"v([^"]+)".*/\1/')
+    local current_ver=$("$SB_BIN_PATH" version 2>/dev/null | awk '/version/{print $NF}')
     
-    vl="vless://$uuid@$sip:$vl_p?encryption=none&flow=xtls-rprx-vision&security=reality&sni=apple.com&fp=chrome&pbk=$pk&sid=$sid&type=tcp#vl-$hostname"
-    vm="vmess://$(echo '{"add":"'$ip'","aid":"0","host":"www.bing.com","id":"'$uuid'","net":"ws","path":"'$ws'","port":"'$vm_p'","ps":"vm-'$hostname'","tls":"'$vmtls'","type":"none","v":"2"}' | base64 -w0)"
-    hy="hysteria2://$uuid@$sip:$hy_p?security=tls&alpn=h3&insecure=$ins&sni=$sni#hy2-$hostname"
-    tu="tuic://$uuid:$uuid@$sip:$tu_p?congestion_control=bbr&udp_relay_mode=native&alpn=h3&sni=$sni&allow_insecure=$ins#tu5-$hostname"
+    green "当前内核版本: $current_ver"
+    green "最新内核版本: $latest_ver"
     
-    for n l in "Vless-Reality" "$vl" "Vmess-WS" "$vm" "Hysteria2" "$hy" "Tuic5" "$tu"; do
-        white "═══════════════════════════════════════"; red "🚀 $n"; echo -e "${yellow}$l${plain}"; qrencode -o- -tANSIUTF8 "$l" 2>/dev/null
+    if [[ "$current_ver" == "$latest_ver" ]]; then
+        yellow "当前已是最新版本"
+    fi
+    
+    readp "是否更新并重启？[y/n]: " choice
+    if [[ "$choice" == "y" || "$choice" == "Y" ]]; then
+        install_sb_core
+        systemctl restart sing-box
+        green "内核更新完成"
+    fi
+}
+
+# 查看节点信息 (修复语法错误的关键函数)
+show_nodes() {
+    if [[ ! -f "$SB_JSON_PATH" ]]; then
+        red "未安装，无节点信息"
+        exit 1
+    fi
+    
+    # 刷新并获取 IP
+    get_ip
+    local current_ip=${v4:-$v6}
+    local formatted_ip=$current_ip
+    [[ "$current_ip" =~ : ]] && formatted_ip="[$current_ip]"
+    
+    # 解析配置
+    local cfg=$(sed 's://.*::g' "$SB_JSON_PATH")
+    local uuid=$(echo "$cfg" | jq -r '.inbounds[0].users[0].uuid')
+    local p_vl=$(echo "$cfg" | jq -r '.inbounds[0].listen_port')
+    local p_vm=$(echo "$cfg" | jq -r '.inbounds[1].listen_port')
+    local p_hy=$(echo "$cfg" | jq -r '.inbounds[2].listen_port')
+    local p_tu=$(echo "$cfg" | jq -r '.inbounds[3].listen_port')
+    local ws_path=$(echo "$cfg" | jq -r '.inbounds[1].transport.path')
+    local vm_tls=$(echo "$cfg" | jq -r '.inbounds[1].tls.enabled')
+    local pub_key=$(cat "$SB_CONF_DIR/public.key" 2>/dev/null)
+    local s_id=$(echo "$cfg" | jq -r '.inbounds[0].tls.reality.short_id[0]')
+    local cert_path=$(echo "$cfg" | jq -r '.inbounds[2].tls.key_path')
+    
+    # 确定 SNI 和跳过证书验证标志
+    local sni_val
+    local allow_insecure
+    
+    if [[ "$cert_path" = "$SB_CONF_DIR/private.key" ]]; then
+        sni_val="www.bing.com"
+        allow_insecure=1
+    else
+        sni_val=$(cat "$ACME_CERT_DIR/ca.log" 2>/dev/null)
+        allow_insecure=0
+    fi
+    
+    local vmess_security=""
+    [[ "$vm_tls" = "true" ]] && vmess_security="tls"
+    
+    # 生成链接
+    local link_vl="vless://$uuid@$formatted_ip:$p_vl?encryption=none&flow=xtls-rprx-vision&security=reality&sni=apple.com&fp=chrome&pbk=$pub_key&sid=$s_id&type=tcp#vl-$hostname"
+    
+    local vmess_json="{\"add\":\"$current_ip\",\"aid\":\"0\",\"host\":\"www.bing.com\",\"id\":\"$uuid\",\"net\":\"ws\",\"path\":\"$ws_path\",\"port\":\"$p_vm\",\"ps\":\"vm-$hostname\",\"tls\":\"$vmess_security\",\"type\":\"none\",\"v\":\"2\"}"
+    local link_vm="vmess://$(echo -n "$vmess_json" | base64 -w0)"
+    
+    local link_hy="hysteria2://$uuid@$formatted_ip:$p_hy?security=tls&alpn=h3&insecure=$allow_insecure&sni=$sni_val#hy2-$hostname"
+    
+    local link_tu="tuic://$uuid:$uuid@$formatted_ip:$p_tu?congestion_control=bbr&udp_relay_mode=native&alpn=h3&sni=$sni_val&allow_insecure=$allow_insecure#tu5-$hostname"
+    
+    # 打印节点 (修复后的循环)
+    local names=("Vless-Reality" "Vmess-WS" "Hysteria2" "Tuic5")
+    local links=("$link_vl" "$link_vm" "$link_hy" "$link_tu")
+    
+    for i in "${!names[@]}"; do
+        white "═══════════════════════════════════════"
+        red "🚀 ${names[$i]}"
+        echo -e "${yellow}${links[$i]}${plain}"
+        qrencode -o- -tANSIUTF8 "${links[$i]}" 2>/dev/null
     done
-    white "═══════════════════════════════════════"; red "🚀 聚合订阅"
-    echo -e "${yellow}$(echo -e "$vl\n$vm\n$hy\n$tu" | base64 -w0)${plain}"
+    
+    white "═══════════════════════════════════════"
+    red "🚀 聚合订阅 (Base64)"
+    echo -e "${yellow}$(echo -e "$link_vl\n$link_vm\n$link_hy\n$link_tu" | base64 -w0)${plain}"
 }
 
-# 7.日志
-sblog(){ red "Ctrl+C退出"; journalctl -u sing-box -o cat -f; }
+# ========================================================
+# 6. 主逻辑
+# ========================================================
 
-# 8.BBR
-bbr(){ bash <(curl -sL https://raw.githubusercontent.com/GamblerIX/singbox/main/bbr.sh); }
-
-# 9.Acme
-acme(){ bash <(curl -sL https://raw.githubusercontent.com/GamblerIX/singbox/main/acme.sh); }
-
-# 主菜单
-sb(){
-clear
-white "══════════════════════════════════════════════════"
-white "         Sing-box 管理脚本 | 快捷方式: sb"
-white "══════════════════════════════════════════════════"
-echo -e "${green} 1.安装  2.卸载  3.重启/停止  4.更新脚本  5.更新内核${plain}"
-echo -e "${green} 6.节点  7.日志  8.BBR  9.Acme  0.退出${plain}"
-white "══════════════════════════════════════════════════"
-v4v6; echo -e "系统:${blue}$op${plain} 架构:${blue}$cpu${plain} BBR:${blue}$bbr${plain}"
-echo -e "IPv4:${blue}${v4:-无}${plain} IPv6:${blue}${v6:-无}${plain}"
-systemctl is-active sing-box &>/dev/null && echo -e "状态:${blue}运行中${plain} 内核:${blue}$(/etc/s-box/sing-box version 2>/dev/null | awk '/version/{print $NF}')${plain}" || \
-    { [[ -f /etc/s-box/sb.json ]] && echo -e "状态:${yellow}已停止${plain}" || echo -e "状态:${red}未安装${plain}"; }
-white "══════════════════════════════════════════════════"
-readp "选择[0-9]:" i
-case "$i" in 1)install;;2)unins;;3)stclre;;4)upsbyg;;5)upcore;;6)sbshare;;7)sblog;;8)bbr;;9)acme;;*)exit;;esac
+main_menu() {
+    clear
+    white "══════════════════════════════════════════════════"
+    white "         Sing-box 管理脚本 | 快捷方式: sb"
+    white "══════════════════════════════════════════════════"
+    echo -e "${green} 1. 安装  2. 卸载  3. 重启/停止  4. 更新脚本  5. 更新内核${plain}"
+    echo -e "${green} 6. 节点  7. 日志  8. BBR优化    9. Acme工具  0. 退出${plain}"
+    white "══════════════════════════════════════════════════"
+    
+    # 动态信息显示
+    detect_system
+    get_ip
+    echo -e "系统:${blue}$op${plain} | 架构:${blue}$cpu${plain} | BBR:${blue}$bbr_status${plain}"
+    echo -e "IPv4:${blue}${v4:-无}${plain} | IPv6:${blue}${v6:-无}${plain}"
+    
+    if systemctl is-active sing-box &>/dev/null; then
+        local current_core=$("$SB_BIN_PATH" version 2>/dev/null | awk '/version/{print $NF}')
+        echo -e "状态:${blue}运行中${plain} | 内核版本:${blue}$current_core${plain}"
+    else
+        if [[ -f "$SB_JSON_PATH" ]]; then
+            echo -e "状态:${yellow}已停止${plain}"
+        else
+            echo -e "状态:${red}未安装${plain}"
+        fi
+    fi
+    white "══════════════════════════════════════════════════"
+    
+    readp "选择 [0-9]: " choice
+    case "$choice" in
+        1) do_install ;;
+        2) do_uninstall ;;
+        3) do_restart_stop ;;
+        4) do_update_script ;;
+        5) do_update_core ;;
+        6) show_nodes ;;
+        7) red "按 Ctrl+C 退出日志查看"; journalctl -u sing-box -o cat -f ;;
+        8) bash <(curl -sL https://raw.githubusercontent.com/GamblerIX/singbox/main/bbr.sh) ;;
+        9) bash <(curl -sL https://raw.githubusercontent.com/GamblerIX/singbox/main/acme.sh) ;;
+        *) exit 0 ;;
+    esac
 }
 
-# 静默模式直接安装，否则显示菜单
+# 进入主程序
 if [[ "$SILENT" = true ]]; then
-    green "静默一键安装模式..."
-    install
+    green "启动静默安装模式..."
+    do_install
 else
-    sb
+    # 首次运行确保检测系统
+    detect_system
+    main_menu
 fi
