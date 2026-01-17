@@ -2,7 +2,7 @@
 # 相关文件: README.md, acme.sh, bbr.sh, sb.sh
 # 
 # Sing-box 一键安装脚本
-# 功能：支持 Vless-reality, Vmess-ws, Hysteria2, Tuic5
+# 功能：仅支持 Vless-Reality
 # 
 export LANG=en_US.UTF-8
 
@@ -89,16 +89,16 @@ install_dependencies() {
         green "正在安装系统依赖……"
         if command -v apt-get &>/dev/null; then
             apt update -y
-            apt install -y jq curl openssl tar wget qrencode socat cron
+            apt install -y jq curl tar wget qrencode socat cron
         elif command -v yum &>/dev/null; then
-            yum install -y epel-release jq curl openssl tar wget qrencode socat
+            yum install -y epel-release jq curl tar wget qrencode socat
         fi
         touch sbyg_update
     fi
 }
 
 # ========================================================
-# 3. 网络与证书功能
+# 3. 网络功能
 # ========================================================
 
 # 获取公网IP
@@ -117,22 +117,6 @@ check_ipv6() {
         ipv_strategy="prefer_ipv4"
     fi
 }
-
-# 端口占用检测与随机生成
-choose_port() {
-    local target_var=$1
-    local temp_port
-    
-    if [[ -z ${!target_var} ]]; then
-        temp_port=$(shuf -i 10000-65535 -n 1)
-        # 循环直到找到未被占用的端口
-        while ss -tunlp | grep -qw "$temp_port"; do
-            temp_port=$(shuf -i 10000-65535 -n 1)
-        done
-        eval "$target_var=$temp_port"
-    fi
-}
-
 
 # ========================================================
 # 4. Sing-box 安装与配置
@@ -164,83 +148,22 @@ install_sb_core() {
     blue "内核已安装，版本：$("$SB_BIN_PATH" version | awk '/version/{print $NF}')"
 }
 
-# 证书配置逻辑 (始终使用自签证书)
-setup_certificates() {
-    yellow "正在生成自签证书..."
-    openssl ecparam -genkey -name prime256v1 -out "$SB_CONF_DIR/private.key"
-    openssl req -new -x509 -days 36500 -key "$SB_CONF_DIR/private.key" -out "$SB_CONF_DIR/cert.pem" -subj "/CN=www.bing.com"
-    
-    tls_ready=true
-    cert_file="$SB_CONF_DIR/cert.pem"
-    key_file="$SB_CONF_DIR/private.key"
-    green "自签证书生成成功"
-}
+# Vless-Reality 不需要证书配置
 
 # 端口与UUID配置
 setup_ports_and_id() {
-    if [[ "$SILENT" = true ]]; then
-        port_vl=25531
-        port_vm=25532
-        port_hy=25533
-        port_tu=25534
-    else
+    # 固定使用 25531 端口
+    port_vl=25531
+    
+    if [[ "$SILENT" != true ]]; then
         echo
-        yellow "--- 协议端口配置 (直接回车将使用推荐/随机端口) ---"
-        
-        # 1. Vless
-        readp "Vless-Reality 端口 [默认随机]: " p_vl
-        if [[ -n "$p_vl" ]]; then
-            port_vl=$p_vl
-            while ss -tunlp | grep -qw "$port_vl"; do
-                red "端口 $port_vl 已被占用，请重新输入"
-                readp "Vless-Reality 端口: " port_vl
-            done
-        else
-            port_vl=""; choose_port port_vl
-        fi
-
-        # 2. Vmess
-        local vm_def
-        [[ "$tls_ready" = "true" ]] && vm_def=8443 || vm_def=8080
-        readp "Vmess-WS 端口 [默认 $vm_def]: " p_vm
-        if [[ -n "$p_vm" ]]; then
-            port_vm=$p_vm
-            while ss -tunlp | grep -qw "$port_vm"; do
-                red "端口 $port_vm 已被占用，请重新输入"
-                readp "Vmess-WS 端口: " port_vm
-            done
-        else
-            port_vm=$vm_def
-        fi
-
-        # 3. Hysteria2
-        readp "Hysteria2 端口 [默认随机]: " p_hy
-        if [[ -n "$p_hy" ]]; then
-            port_hy=$p_hy
-            while ss -tunlp | grep -qw "$port_hy"; do
-                red "端口 $p_hy 已被占用，请重新输入"
-                readp "Hysteria2 端口: " port_hy
-            done
-        else
-            port_hy=""; choose_port port_hy
-        fi
-
-        # 4. Tuic5
-        readp "Tuic5 端口 [默认随机]: " p_tu
-        if [[ -n "$p_tu" ]]; then
-            port_tu=$p_tu
-            while ss -tunlp | grep -qw "$port_tu"; do
-                red "端口 $p_tu 已被占用，请重新输入"
-                readp "Tuic5 端口: " port_tu
-            done
-        else
-            port_tu=""; choose_port port_tu
-        fi
+        yellow "--- Vless-Reality 端口配置 ---"
+        green "使用固定端口: $port_vl"
         echo
     fi
     
     uuid=$("$SB_BIN_PATH" generate uuid)
-    green "配置完成 -> VL:$port_vl | VM:$port_vm | HY:$port_hy | TU:$port_tu"
+    green "配置完成 -> Vless-Reality 端口: $port_vl"
     blue "生成的账户 UUID: $uuid"
 }
 
@@ -253,7 +176,7 @@ generate_config() {
         sniff_cfg='"sniff":true,"sniff_override_destination":true,'
     fi
     
-    # 构建复杂的 JSON 配置
+    # 构建 Vless-Reality 配置
     cat > "$SB_JSON_PATH" <<EOF
 {
   "log": {
@@ -285,69 +208,6 @@ generate_config() {
           "private_key": "${private_key}",
           "short_id": [ "${short_id}" ]
         }
-      }
-    },
-    {
-      "type": "vmess",
-      ${sniff_cfg}
-      "tag": "vmess",
-      "listen": "::",
-      "listen_port": ${port_vm},
-      "users": [
-        {
-          "uuid": "${uuid}",
-          "alterId": 0
-        }
-      ],
-      "transport": {
-        "type": "ws",
-        "path": "${uuid}-vm",
-        "max_early_data": 2048,
-        "early_data_header_name": "Sec-WebSocket-Protocol"
-      },
-      "tls": {
-        "enabled": ${tls_ready},
-        "server_name": "www.bing.com",
-        "certificate_path": "${cert_file}",
-        "key_path": "${key_file}"
-      }
-    },
-    {
-      "type": "hysteria2",
-      ${sniff_cfg}
-      "tag": "hy2",
-      "listen": "::",
-      "listen_port": ${port_hy},
-      "users": [
-        {
-          "password": "${uuid}"
-        }
-      ],
-      "tls": {
-        "enabled": true,
-        "alpn": [ "h3" ],
-        "certificate_path": "${cert_file}",
-        "key_path": "${key_file}"
-      }
-    },
-    {
-      "type": "tuic",
-      ${sniff_cfg}
-      "tag": "tuic",
-      "listen": "::",
-      "listen_port": ${port_tu},
-      "users": [
-        {
-          "uuid": "${uuid}",
-          "password": "${uuid}"
-        }
-      ],
-      "congestion_control": "bbr",
-      "tls": {
-        "enabled": true,
-        "alpn": [ "h3" ],
-        "certificate_path": "${cert_file}",
-        "key_path": "${key_file}"
       }
     }
   ],
@@ -508,46 +368,18 @@ show_nodes() {
     local cfg=$(sed 's://.*::g' "$SB_JSON_PATH")
     local uuid=$(echo "$cfg" | jq -r '.inbounds[0].users[0].uuid')
     local p_vl=$(echo "$cfg" | jq -r '.inbounds[0].listen_port')
-    local p_vm=$(echo "$cfg" | jq -r '.inbounds[1].listen_port')
-    local p_hy=$(echo "$cfg" | jq -r '.inbounds[2].listen_port')
-    local p_tu=$(echo "$cfg" | jq -r '.inbounds[3].listen_port')
-    local ws_path=$(echo "$cfg" | jq -r '.inbounds[1].transport.path')
-    local vm_tls=$(echo "$cfg" | jq -r '.inbounds[1].tls.enabled')
     local pub_key=$(cat "$SB_CONF_DIR/public.key" 2>/dev/null)
     local s_id=$(echo "$cfg" | jq -r '.inbounds[0].tls.reality.short_id[0]')
-    local cert_path=$(echo "$cfg" | jq -r '.inbounds[2].tls.key_path')
     
-    # 确定 SNI 和跳过证书验证标志 (始终自签)
-    local sni_val="www.bing.com"
-    local allow_insecure=1
-    
-    local vmess_security=""
-    [[ "$vm_tls" = "true" ]] && vmess_security="tls"
-    
-    # 生成链接
+    # 生成 Vless-Reality 链接
     local link_vl="vless://$uuid@$formatted_ip:$p_vl?encryption=none&flow=xtls-rprx-vision&security=reality&sni=apple.com&fp=chrome&pbk=$pub_key&sid=$s_id&type=tcp#vl-$hostname"
     
-    local vmess_json="{\"add\":\"$current_ip\",\"aid\":\"0\",\"host\":\"www.bing.com\",\"id\":\"$uuid\",\"net\":\"ws\",\"path\":\"$ws_path\",\"port\":\"$p_vm\",\"ps\":\"vm-$hostname\",\"tls\":\"$vmess_security\",\"type\":\"none\",\"v\":\"2\"}"
-    local link_vm="vmess://$(echo -n "$vmess_json" | base64 -w0)"
-    
-    local link_hy="hysteria2://$uuid@$formatted_ip:$p_hy?security=tls&alpn=h3&insecure=$allow_insecure&sni=$sni_val#hy2-$hostname"
-    
-    local link_tu="tuic://$uuid:$uuid@$formatted_ip:$p_tu?congestion_control=bbr&udp_relay_mode=native&alpn=h3&sni=$sni_val&allow_insecure=$allow_insecure#tu5-$hostname"
-    
     # 打印节点
-    local names=("Vless-Reality" "Vmess-WS" "Hysteria2" "Tuic5")
-    local links=("$link_vl" "$link_vm" "$link_hy" "$link_tu")
-    
-    for i in "${!names[@]}"; do
-        white "═══════════════════════════════════════"
-        red "🚀 ${names[$i]}"
-        echo -e "${yellow}${links[$i]}${plain}"
-        qrencode -o- -tANSIUTF8 "${links[$i]}" 2>/dev/null
-    done
-    
     white "═══════════════════════════════════════"
-    red "🚀 聚合订阅 (Base64)"
-    echo -e "${yellow}$(echo -e "$link_vl\n$link_vm\n$link_hy\n$link_tu" | base64 -w0)${plain}"
+    red "🚀 Vless-Reality"
+    echo -e "${yellow}${link_vl}${plain}"
+    qrencode -o- -tANSIUTF8 "${link_vl}" 2>/dev/null
+    white "═══════════════════════════════════════"
 }
 
 # ========================================================
@@ -556,9 +388,6 @@ show_nodes() {
 
 # 安装全流程
 do_install() {
-    # 强制重置静默标志，确保从菜单点击时始终有交互
-    SILENT=false
-    
     if [[ -f /etc/systemd/system/sing-box.service ]]; then
         red "Sing-box 已安装，请勿重复安装"
         read -n 1 -s -r -p "按任意键返回主菜单..."
@@ -576,13 +405,10 @@ do_install() {
     # 1. 下载内核
     install_sb_core || { red "内核下载失败，请检查网络"; return 1; }
     
-    # 2. 证书配置
-    setup_certificates
-    
-    # 3. 端口与 ID 配置
+    # 2. 端口与 ID 配置
     setup_ports_and_id
     
-    # 4. 生成 REALITY 密钥对
+    # 3. 生成 REALITY 密钥对
     yellow "正在生成 REALITY 密钥对..."
     local key_pair=$("$SB_BIN_PATH" generate reality-keypair 2>/dev/null)
     private_key=$(echo "$key_pair" | awk '/PrivateKey/{print $2}')
@@ -595,7 +421,7 @@ do_install() {
     echo "$public_key" > "$SB_CONF_DIR/public.key"
     short_id=$("$SB_BIN_PATH" generate rand --hex 4)
     
-    # 5. 写入配置与启动服务
+    # 4. 写入配置与启动服务
     generate_config
     if [[ ! -f "$SB_JSON_PATH" ]]; then
         red "配置文件写入失败"
@@ -619,8 +445,6 @@ do_install() {
 }
 
 main_menu() {
-    # 进入菜单时强制关闭静默模式
-    SILENT=false
     while true; do
         clear
         white "══════════════════════════════════════════════════"
@@ -675,5 +499,7 @@ if [[ "$SILENT" = true ]]; then
 else
     # 首次运行确保检测系统
     detect_system
+    # 从菜单进入时，确保关闭静默模式
+    SILENT=false
     main_menu
 fi
