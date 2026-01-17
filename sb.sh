@@ -2,7 +2,7 @@
 # 相关文件: README.md, acme.sh, bbr.sh, sb.sh
 # 
 # Sing-box 一键安装脚本
-# 功能：仅支持 Vless-Reality
+# 功能：支持 Vless-Reality, Trojan
 # 
 export LANG=en_US.UTF-8
 
@@ -15,6 +15,9 @@ SCRIPT_VERSION="1.1.2"
 
 # 静默模式标志
 SILENT=false
+
+# 是否启用 Trojan
+ENABLE_TROJAN=false
 
 # 颜色定义
 red='\033[31m'
@@ -89,9 +92,9 @@ install_dependencies() {
         green "正在安装系统依赖……"
         if command -v apt-get &>/dev/null; then
             apt update -y
-            apt install -y jq curl tar wget qrencode socat cron
+            apt install -y jq curl openssl tar wget qrencode socat cron
         elif command -v yum &>/dev/null; then
-            yum install -y epel-release jq curl tar wget qrencode socat
+            yum install -y epel-release jq curl openssl tar wget qrencode socat
         fi
         touch sbyg_update
     fi
@@ -149,22 +152,54 @@ install_sb_core() {
 }
 
 # Vless-Reality 不需要证书配置
+# Trojan 证书配置
+setup_certificates() {
+    if [[ "$ENABLE_TROJAN" != true ]]; then
+        return
+    fi
+    
+    yellow "正在生成自签证书（用于 Trojan）..."
+    openssl ecparam -genkey -name prime256v1 -out "$SB_CONF_DIR/private.key"
+    openssl req -new -x509 -days 36500 -key "$SB_CONF_DIR/private.key" -out "$SB_CONF_DIR/cert.pem" -subj "/CN=www.bing.com"
+    
+    cert_file="$SB_CONF_DIR/cert.pem"
+    key_file="$SB_CONF_DIR/private.key"
+    green "自签证书生成成功"
+}
 
 # 端口与UUID配置
 setup_ports_and_id() {
-    # 固定使用 25531 端口
+    # Vless-Reality 固定使用 25531 端口
     port_vl=25531
+    
+    # Trojan 固定使用 25532 端口
+    port_tj=25532
     
     if [[ "$SILENT" != true ]]; then
         echo
-        yellow "--- Vless-Reality 端口配置 ---"
-        green "使用固定端口: $port_vl"
+        yellow "--- 协议配置 ---"
+        readp "是否启用 Trojan 协议？[y/n] (默认: n): " enable_tj
+        if [[ "$enable_tj" == "y" || "$enable_tj" == "Y" ]]; then
+            ENABLE_TROJAN=true
+            green "已启用: Vless-Reality (端口 $port_vl) + Trojan (端口 $port_tj)"
+        else
+            ENABLE_TROJAN=false
+            green "已启用: Vless-Reality (端口 $port_vl)"
+        fi
         echo
+    else
+        green "静默模式: 仅启用 Vless-Reality (端口 $port_vl)"
     fi
     
     uuid=$("$SB_BIN_PATH" generate uuid)
-    green "配置完成 -> Vless-Reality 端口: $port_vl"
-    blue "生成的账户 UUID: $uuid"
+    trojan_password=$("$SB_BIN_PATH" generate rand --hex 16)
+    
+    if [[ "$ENABLE_TROJAN" = true ]]; then
+        blue "Vless UUID: $uuid"
+        blue "Trojan 密码: $trojan_password"
+    else
+        blue "生成的 UUID: $uuid"
+    fi
 }
 
 # 生成配置文件 sb.json
@@ -176,23 +211,17 @@ generate_config() {
         sniff_cfg='"sniff":true,"sniff_override_destination":true,'
     fi
     
-    # 构建 Vless-Reality 配置
-    cat > "$SB_JSON_PATH" <<EOF
-{
-  "log": {
-    "level": "info",
-    "timestamp": true
-  },
-  "inbounds": [
+    # 构建 inbounds 数组
+    local inbounds='[
     {
       "type": "vless",
-      ${sniff_cfg}
+      '"${sniff_cfg}"'
       "tag": "vless",
       "listen": "::",
-      "listen_port": ${port_vl},
+      "listen_port": '"${port_vl}"',
       "users": [
         {
-          "uuid": "${uuid}",
+          "uuid": "'"${uuid}"'",
           "flow": "xtls-rprx-vision"
         }
       ],
@@ -205,12 +234,47 @@ generate_config() {
             "server": "apple.com",
             "server_port": 443
           },
-          "private_key": "${private_key}",
-          "short_id": [ "${short_id}" ]
+          "private_key": "'"${private_key}"'",
+          "short_id": [ "'"${short_id}"'" ]
         }
       }
-    }
-  ],
+    }'
+    
+    # 如果启用 Trojan，添加 Trojan inbound
+    if [[ "$ENABLE_TROJAN" = true ]]; then
+        inbounds+=',
+    {
+      "type": "trojan",
+      '"${sniff_cfg}"'
+      "tag": "trojan",
+      "listen": "::",
+      "listen_port": '"${port_tj}"',
+      "users": [
+        {
+          "name": "user",
+          "password": "'"${trojan_password}"'"
+        }
+      ],
+      "tls": {
+        "enabled": true,
+        "server_name": "www.bing.com",
+        "certificate_path": "'"${cert_file}"'",
+        "key_path": "'"${key_file}"'"
+      }
+    }'
+    fi
+    
+    inbounds+='
+  ]'
+    
+    # 写入完整配置
+    cat > "$SB_JSON_PATH" <<EOF
+{
+  "log": {
+    "level": "info",
+    "timestamp": true
+  },
+  "inbounds": ${inbounds},
   "outbounds": [
     {
       "type": "direct",
@@ -374,12 +438,28 @@ show_nodes() {
     # 生成 Vless-Reality 链接
     local link_vl="vless://$uuid@$formatted_ip:$p_vl?encryption=none&flow=xtls-rprx-vision&security=reality&sni=apple.com&fp=chrome&pbk=$pub_key&sid=$s_id&type=tcp#vl-$hostname"
     
-    # 打印节点
+    # 打印 Vless 节点
     white "═══════════════════════════════════════"
     red "🚀 Vless-Reality"
     echo -e "${yellow}${link_vl}${plain}"
     qrencode -o- -tANSIUTF8 "${link_vl}" 2>/dev/null
     white "═══════════════════════════════════════"
+    
+    # 检查是否有 Trojan
+    local tj_count=$(echo "$cfg" | jq '[.inbounds[] | select(.type=="trojan")] | length')
+    if [[ "$tj_count" -gt 0 ]]; then
+        local p_tj=$(echo "$cfg" | jq -r '.inbounds[] | select(.type=="trojan") | .listen_port')
+        local tj_pwd=$(echo "$cfg" | jq -r '.inbounds[] | select(.type=="trojan") | .users[0].password')
+        
+        # 生成 Trojan 链接
+        local link_tj="trojan://$tj_pwd@$formatted_ip:$p_tj?security=tls&sni=www.bing.com&alpn=http/1.1&type=tcp&allowInsecure=1#tj-$hostname"
+        
+        white "═══════════════════════════════════════"
+        red "🚀 Trojan"
+        echo -e "${yellow}${link_tj}${plain}"
+        qrencode -o- -tANSIUTF8 "${link_tj}" 2>/dev/null
+        white "═══════════════════════════════════════"
+    fi
 }
 
 # ========================================================
@@ -408,7 +488,10 @@ do_install() {
     # 2. 端口与 ID 配置
     setup_ports_and_id
     
-    # 3. 生成 REALITY 密钥对
+    # 3. 证书配置（如果启用 Trojan）
+    setup_certificates
+    
+    # 4. 生成 REALITY 密钥对
     yellow "正在生成 REALITY 密钥对..."
     local key_pair=$("$SB_BIN_PATH" generate reality-keypair 2>/dev/null)
     private_key=$(echo "$key_pair" | awk '/PrivateKey/{print $2}')
@@ -421,7 +504,7 @@ do_install() {
     echo "$public_key" > "$SB_CONF_DIR/public.key"
     short_id=$("$SB_BIN_PATH" generate rand --hex 4)
     
-    # 4. 写入配置与启动服务
+    # 5. 写入配置与启动服务
     generate_config
     if [[ ! -f "$SB_JSON_PATH" ]]; then
         red "配置文件写入失败"
